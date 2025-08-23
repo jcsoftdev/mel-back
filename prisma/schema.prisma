@@ -1,0 +1,97 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+model User {
+  id                   String                   @id @default(uuid())
+  name                 String
+  email                String                   @unique
+  password             String
+  createdAt            DateTime                 @default(now())
+  roles                UserPermission[]
+  documentPermissions  UserDocumentPermission[]
+}
+
+model Role {
+  id                   String                   @id @default(uuid())
+  name                 String                   @unique
+  createdAt            DateTime                 @default(now())
+  userPermissions      UserPermission[]
+  documentPermissions  UserDocumentPermission[]
+}
+
+model Section {
+  id          String       @id @default(uuid())
+  name        String
+  createdAt   DateTime     @default(now())
+
+  // Self-relation for folder hierarchy
+  parentId    String?
+  parent      Section?     @relation("SectionChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Section[]    @relation("SectionChildren")
+
+  // Contents
+  documents   Document[]
+  permissions UserPermission[]
+
+  // Same name allowed in different parents, but unique within the same parent
+  @@unique([parentId, name])
+
+  // Helpful indexes
+  @@index([parentId])
+  @@index([name])
+}
+
+model Document {
+  id               String                  @id @default(uuid())
+  title            String
+  url              String
+  sectionId        String
+  createdAt        DateTime                @default(now())
+  section          Section                 @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  userPermissions  UserDocumentPermission[]
+
+  @@index([sectionId])
+}
+
+model UserPermission {
+  id        String   @id @default(uuid())
+  userId    String
+  sectionId String
+  roleId    String
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  section   Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sectionId]) // one role per user per section
+  @@index([sectionId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+model UserDocumentPermission {
+  id         String   @id @default(uuid())
+  userId     String
+  documentId String
+  roleId     String
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document  Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, documentId]) // one role per user per document
+  @@index([documentId])
+  @@index([userId])
+  @@index([roleId])
+}
