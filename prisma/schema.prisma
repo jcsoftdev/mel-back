@@ -7,33 +7,57 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/**
+ * ---------- Access model ----------
+ */
+enum AccessLevel {
+  READ
+  WRITE
+  ADMIN
+}
+
+/**
+ * ---------- Core models ----------
+ */
 model User {
-  id                  String                   @id @default(uuid())
-  name                String
-  email               String                   @unique
-  password            String
-  createdAt           DateTime                 @default(now())
-  documentPermissions UserDocumentPermission[]
-  roles               UserPermission[]
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+
+  // User <-> Role (global, not per-section)
+  roles UserRole[]
 }
 
 model Role {
-  id                  String                   @id @default(uuid())
-  name                String                   @unique
-  createdAt           DateTime                 @default(now())
-  documentPermissions UserDocumentPermission[]
-  userPermissions     UserPermission[]
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  // Members
+  userRoles UserRole[]
+
+  // Grants
+  sectionAccess  RoleSectionAccess[]
+  documentAccess RoleDocumentAccess[]
 }
 
 model Section {
-  id          String           @id @default(uuid())
-  name        String
-  createdAt   DateTime         @default(now())
-  parentId    String?
-  documents   Document[]
-  parent      Section?         @relation("SectionChildren", fields: [parentId], references: [id], onDelete: Cascade)
-  children    Section[]        @relation("SectionChildren")
-  permissions UserPermission[]
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  // self-relation (folders)
+  parentId String?
+  parent   Section?  @relation("SectionChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children Section[] @relation("SectionChildren")
+
+  // contents
+  documents Document[]
+
+  // role grants
+  roleGrants RoleSectionAccess[]
 
   @@unique([parentId, name])
   @@index([parentId])
@@ -41,43 +65,64 @@ model Section {
 }
 
 model Document {
-  id              String                   @id @default(uuid())
-  title           String
-  url             String
-  sectionId       String
-  createdAt       DateTime                 @default(now())
-  section         Section                  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  userPermissions UserDocumentPermission[]
-
-  @@index([sectionId])
-}
-
-model UserPermission {
-  id        String  @id @default(uuid())
-  userId    String
+  id        String   @id @default(uuid())
+  title     String
+  url       String
   sectionId String
-  roleId    String
-  role      Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  section   Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
 
-  @@unique([userId, sectionId])
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  // role grants
+  roleGrants RoleDocumentAccess[]
+
   @@index([sectionId])
+}
+
+/**
+ * ---------- Join / grant tables ----------
+ */
+
+// Users ↔ Roles (global membership)
+model UserRole {
+  id     String @id @default(uuid())
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
   @@index([userId])
   @@index([roleId])
 }
 
-model UserDocumentPermission {
-  id         String   @id @default(uuid())
-  userId     String
-  documentId String
-  roleId     String
-  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+// Role → Section grant (applies to that section; your app can inherit to children)
+model RoleSectionAccess {
+  id        String      @id @default(uuid())
+  roleId    String
+  sectionId String
+  level     AccessLevel @default(READ)
 
-  @@unique([userId, documentId])
-  @@index([documentId])
-  @@index([userId])
+  role    Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, sectionId])
   @@index([roleId])
+  @@index([sectionId])
+}
+
+// Role → Document grant
+model RoleDocumentAccess {
+  id         String      @id @default(uuid())
+  roleId     String
+  documentId String
+  level      AccessLevel @default(READ)
+
+  role     Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, documentId])
+  @@index([roleId])
+  @@index([documentId])
 }
