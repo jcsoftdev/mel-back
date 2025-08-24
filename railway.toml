@@ -1,0 +1,10 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "npm run start:prod"
+restartPolicyType = "on_failure"
+
+[variables]
+# Railway will automatically inject DATABASE_URL and PORT
+# Add your custom environment variables in the Railway dashboard

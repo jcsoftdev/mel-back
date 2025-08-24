@@ -51,13 +51,8 @@ Create a `.env` file in the root directory with the following variables:
 
 ```env
 DATABASE_URL="postgresql://username:password@localhost:5432/melanie_db"
-JWT_SECRET="your-jwt-secret-key"
-GOOGLE_DRIVE_API_KEY="your-google-drive-api-key"
 GOOGLE_CLIENT_ID="your-service-account-email@project.iam.gserviceaccount.com"
-GOOGLE_CLIENT_SECRET="your-google-client-secret"
-GOOGLE_REDIRECT_URI="http://localhost:5431/api/auth/google/callback"
 GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nyour-private-key\n-----END PRIVATE KEY-----"
-GOOGLE_CONFIG_NAME="your-service-account-credentials.json"
 ```
 
 ## Database Setup
@@ -186,7 +181,6 @@ The `/sections/tree` endpoint now returns a comprehensive hierarchical structure
 5. Extract the required values from the JSON file and add them to your `.env` file:
    - `GOOGLE_CLIENT_ID`: The service account email
    - `GOOGLE_PRIVATE_KEY`: The private key (with proper line breaks)
-   - `GOOGLE_CONFIG_NAME`: The original JSON filename
 6. Optionally, place the complete JSON file in your project root for reference
 
 #### Sync Functionality
@@ -212,52 +206,95 @@ $ pnpm run test:cov
 
 ## Deployment
 
-### Production Environment
+### Railway Deployment
 
-Before deploying to production, ensure you have:
+This project is configured for easy deployment on Railway using GitHub integration.
 
-1. **Database**: PostgreSQL instance with proper connection string
-2. **Environment Variables**: All required environment variables set
-3. **Google Drive Credentials**: Service account credentials configured
-4. **SSL Certificate**: For HTTPS in production
+#### Prerequisites
 
-### Build for Production
+1. **GitHub Repository**: Push your code to a GitHub repository
+2. **Railway Account**: Sign up at [railway.app](https://railway.app)
+3. **Database**: Railway PostgreSQL service
+4. **Google Drive Credentials**: Service account credentials
 
-```bash
-# Build the application
-$ pnpm run build
+#### Step-by-Step Railway Deployment
 
-# Start in production mode
-$ pnpm run start:prod
+1. **Connect GitHub Repository**
+   - Go to [railway.app](https://railway.app) and sign in
+   - Click "New Project" → "Deploy from GitHub repo"
+   - Select your Melanie backend repository
+
+2. **Add PostgreSQL Database**
+   - In your Railway project dashboard, click "New Service"
+   - Select "Database" → "PostgreSQL"
+   - Railway will automatically create a database and provide connection details
+
+3. **Configure Environment Variables**
+   - Go to your service → "Variables" tab
+   - Add the following environment variables:
+
+```env
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+GOOGLE_CLIENT_ID=your-service-account-email@project.iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nyour-private-key\n-----END PRIVATE KEY-----"
+PORT=${{PORT}}
 ```
 
-### Docker Deployment
+4. **Database Setup**
+   - Railway will automatically run `prisma migrate deploy` during deployment
+   - Ensure your `package.json` has the build script configured:
+
+```json
+{
+  "scripts": {
+    "build": "nest build",
+    "start:prod": "node dist/main",
+    "postinstall": "prisma generate && prisma migrate deploy"
+  }
+}
+```
+
+5. **Deploy**
+   - Railway automatically deploys when you push to your main branch
+   - Monitor the deployment in the Railway dashboard
+   - Your app will be available at the provided Railway URL
+
+#### Railway Configuration Files
+
+Create a `railway.toml` file in your project root (optional):
+
+```toml
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "npm run start:prod"
+restartPolicyType = "on_failure"
+```
+
+### Alternative Deployment Options
+
+#### Docker Deployment
 
 ```dockerfile
-# Example Dockerfile
 FROM node:18-alpine
 WORKDIR /app
 COPY package*.json ./
-RUN pnpm install --only=production
+RUN npm install --only=production
 COPY . .
-RUN pnpm run build
+RUN npm run build
 EXPOSE 3000
-CMD ["pnpm", "run", "start:prod"]
+CMD ["npm", "run", "start:prod"]
 ```
 
-### Environment Variables for Production
+#### Manual Production Setup
 
-```env
-NODE_ENV=production
-PORT=3000
-DATABASE_URL="postgresql://user:pass@host:5432/melanie_prod"
-JWT_SECRET="your-secure-jwt-secret"
-GOOGLE_DRIVE_API_KEY="your-production-google-drive-api-key"
-GOOGLE_CLIENT_ID="your-service-account-email@project.iam.gserviceaccount.com"
-GOOGLE_CLIENT_SECRET="your-production-google-client-secret"
-GOOGLE_REDIRECT_URI="https://yourdomain.com/api/auth/google/callback"
-GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nyour-production-private-key\n-----END PRIVATE KEY-----"
-GOOGLE_CONFIG_NAME="your-production-service-account-credentials.json"
+```bash
+# Build the application
+$ npm run build
+
+# Start in production mode
+$ npm run start:prod
 ```
 
 ## Project Structure
