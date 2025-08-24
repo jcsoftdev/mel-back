@@ -24,7 +24,7 @@
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Melanie Backend - A NestJS-based API for document and section management with Google Drive integration, role-based access control, and hierarchical content organization.
 
 ## Project setup
 
@@ -45,6 +45,158 @@ $ pnpm run start:dev
 $ pnpm run start:prod
 ```
 
+## Environment Setup
+
+Create a `.env` file in the root directory with the following variables:
+
+```env
+DATABASE_URL="postgresql://username:password@localhost:5432/melanie_db"
+JWT_SECRET="your-jwt-secret-key"
+GOOGLE_DRIVE_API_KEY="your-google-drive-api-key"
+GOOGLE_CLIENT_ID="your-service-account-email@project.iam.gserviceaccount.com"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+GOOGLE_REDIRECT_URI="http://localhost:5431/api/auth/google/callback"
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nyour-private-key\n-----END PRIVATE KEY-----"
+GOOGLE_CONFIG_NAME="your-service-account-credentials.json"
+```
+
+## Database Setup
+
+```bash
+# Generate Prisma client
+$ npx prisma generate
+
+# Run database migrations
+$ npx prisma migrate deploy
+
+# (Optional) Seed the database
+$ npx prisma db seed
+```
+
+## API Documentation
+
+### Authentication
+
+The API uses JWT-based authentication. All protected endpoints require a valid JWT token in the Authorization header.
+
+#### Auth Endpoints
+
+- `POST /auth/register` - Register a new user
+- `POST /auth/login` - Login and receive JWT token
+- `GET /auth/profile` - Get current user profile (protected)
+
+#### Example Login Request
+
+```json
+{
+  "email": "user@example.com",
+  "password": "password123"
+}
+```
+
+### Core Endpoints
+
+#### Sections
+
+- `GET /sections` - Get all sections
+- `GET /sections/tree` - **Get hierarchical section tree with documents**
+- `GET /sections/:id` - Get section by ID
+- `POST /sections` - Create new section
+- `PATCH /sections/:id` - Update section
+- `DELETE /sections/:id` - Delete section
+
+#### Documents
+
+- `GET /documents` - Get all documents
+- `GET /documents/:id` - Get document by ID
+- `POST /documents` - Create new document
+- `PATCH /documents/:id` - Update document
+- `DELETE /documents/:id` - Delete document
+
+#### Users
+
+- `GET /users` - Get all users
+- `GET /users/:id` - Get user by ID
+- `POST /users` - Create new user
+- `PATCH /users/:id` - Update user
+- `DELETE /users/:id` - Delete user
+- `POST /users/:id/sync-drive` - Sync Google Drive content
+
+#### Roles
+
+- `GET /roles` - Get all roles
+- `POST /roles` - Create new role
+- `GET /roles/:id/sections` - Get section permissions for role
+- `POST /roles/:id/sections` - Grant section access to role
+- `DELETE /roles/:id/sections/:sectionId` - Remove section access
+
+### Enhanced Sections Tree Endpoint
+
+The `/sections/tree` endpoint now returns a comprehensive hierarchical structure including both sections and their associated documents:
+
+#### Response Structure
+
+```json
+[
+  {
+    "id": "section-uuid",
+    "name": "Section Name",
+    "parentId": null,
+    "documentCount": 3,
+    "documents": [
+      {
+        "id": "document-uuid",
+        "title": "Document Title",
+        "url": "https://drive.google.com/file/d/...",
+        "driveId": "google-drive-file-id",
+        "sectionId": "section-uuid",
+        "createdAt": "2025-01-15T10:30:00.000Z"
+      }
+    ],
+    "children": [
+      {
+        "id": "child-section-uuid",
+        "name": "Child Section",
+        "parentId": "section-uuid",
+        "documentCount": 1,
+        "documents": [...],
+        "children": []
+      }
+    ]
+  }
+]
+```
+
+#### Key Features
+
+- **Hierarchical Structure**: Nested sections with unlimited depth
+- **Document Integration**: Each section includes its associated documents
+- **Google Drive Sync**: Documents include `driveId` for Google Drive integration
+- **Performance Optimized**: Uses efficient database queries with proper indexing
+- **Type Safety**: Fully typed with TypeScript interfaces
+
+### Google Drive Integration
+
+#### Setup
+
+1. Create a Google Cloud Project
+2. Enable Google Drive API
+3. Create service account credentials
+4. Download the service account JSON file
+5. Extract the required values from the JSON file and add them to your `.env` file:
+   - `GOOGLE_CLIENT_ID`: The service account email
+   - `GOOGLE_PRIVATE_KEY`: The private key (with proper line breaks)
+   - `GOOGLE_CONFIG_NAME`: The original JSON filename
+6. Optionally, place the complete JSON file in your project root for reference
+
+#### Sync Functionality
+
+- `POST /users/:id/sync-drive?folderId=<google-drive-folder-id>`
+- Automatically creates sections for folders
+- Creates documents for PDF files
+- Maintains Google Drive IDs for future sync operations
+- Supports incremental updates
+
 ## Run tests
 
 ```bash
@@ -60,40 +212,98 @@ $ pnpm run test:cov
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+### Production Environment
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Before deploying to production, ensure you have:
+
+1. **Database**: PostgreSQL instance with proper connection string
+2. **Environment Variables**: All required environment variables set
+3. **Google Drive Credentials**: Service account credentials configured
+4. **SSL Certificate**: For HTTPS in production
+
+### Build for Production
 
 ```bash
-$ pnpm install -g mau
-$ mau deploy
+# Build the application
+$ pnpm run build
+
+# Start in production mode
+$ pnpm run start:prod
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### Docker Deployment
 
-## Resources
+```dockerfile
+# Example Dockerfile
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN pnpm install --only=production
+COPY . .
+RUN pnpm run build
+EXPOSE 3000
+CMD ["pnpm", "run", "start:prod"]
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+### Environment Variables for Production
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```env
+NODE_ENV=production
+PORT=3000
+DATABASE_URL="postgresql://user:pass@host:5432/melanie_prod"
+JWT_SECRET="your-secure-jwt-secret"
+GOOGLE_DRIVE_API_KEY="your-production-google-drive-api-key"
+GOOGLE_CLIENT_ID="your-service-account-email@project.iam.gserviceaccount.com"
+GOOGLE_CLIENT_SECRET="your-production-google-client-secret"
+GOOGLE_REDIRECT_URI="https://yourdomain.com/api/auth/google/callback"
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nyour-production-private-key\n-----END PRIVATE KEY-----"
+GOOGLE_CONFIG_NAME="your-production-service-account-credentials.json"
+```
 
-## Support
+## Project Structure
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+```
+src/
+├── auth/                 # Authentication module
+│   ├── dto/             # Data transfer objects
+│   ├── guards/          # JWT and roles guards
+│   └── strategies/      # Passport strategies
+├── documents/           # Document management
+├── sections/            # Section management
+│   └── types/          # TypeScript interfaces
+├── users/              # User management
+├── roles/              # Role-based access control
+├── google-drive/       # Google Drive integration
+└── prisma/             # Database schema and migrations
+```
 
-## Stay in touch
+## Key Technologies
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+- **Framework**: NestJS with TypeScript
+- **Database**: PostgreSQL with Prisma ORM
+- **Authentication**: JWT with Passport
+- **Authorization**: Role-based access control
+- **External API**: Google Drive API integration
+- **Testing**: Jest for unit and e2e tests
+- **Documentation**: Swagger/OpenAPI
+
+## Recent Enhancements
+
+### Enhanced Sections Tree API
+
+- **Performance Optimization**: Implemented atomic upsert operations for better database performance
+- **Document Integration**: Added full document objects to the `/sections/tree` endpoint response
+- **Type Safety**: Enhanced TypeScript interfaces for better development experience
+- **Google Drive Sync**: Improved `driveId` handling for reliable Google Drive integration
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+This project is licensed under the MIT License - see the LICENSE file for details.
