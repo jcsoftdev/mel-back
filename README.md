@@ -237,7 +237,6 @@ This project is configured for easy deployment on Railway using GitHub integrati
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 GOOGLE_CLIENT_ID=your-service-account-email@project.iam.gserviceaccount.com
 GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nyour-private-key\n-----END PRIVATE KEY-----"
-PORT=${{PORT}}
 ```
 
 4. **Database Setup**
