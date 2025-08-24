@@ -8,6 +8,7 @@ import { RolesModule } from './roles/roles.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 import { SectionsModule } from './sections/sections.module';
+import { DocumentsModule } from './documents/documents.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { SectionsModule } from './sections/sections.module';
     PrismaModule,
     UsersModule,
     SectionsModule,
+    DocumentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
