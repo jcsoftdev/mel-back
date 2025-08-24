@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { AccessLevel } from '@prisma/client';
 
 @Injectable()
 export class RolesService {
@@ -72,13 +71,10 @@ export class RolesService {
             sectionId,
           },
         },
-        update: {
-          level: AccessLevel.READ,
-        },
+        update: {},
         create: {
           roleId,
           sectionId,
-          level: AccessLevel.READ,
         },
       }),
     );
@@ -94,13 +90,10 @@ export class RolesService {
           sectionId,
         },
       },
-      update: {
-        level: AccessLevel.READ,
-      },
+      update: {},
       create: {
         roleId,
         sectionId,
-        level: AccessLevel.READ,
       },
     });
   }
@@ -128,11 +121,7 @@ export class RolesService {
     });
   }
 
-  async addDocumentAccess(
-    roleId: string,
-    documentId: string,
-    level: AccessLevel = AccessLevel.READ,
-  ) {
+  async addDocumentAccess(roleId: string, documentId: string) {
     return await this.prisma.roleDocumentAccess.upsert({
       where: {
         roleId_documentId: {
@@ -140,14 +129,11 @@ export class RolesService {
           documentId,
         },
       },
-      update: {
-        level: level,
-      },
       create: {
         roleId,
         documentId,
-        level: level,
       },
+      update: {},
     });
   }
 

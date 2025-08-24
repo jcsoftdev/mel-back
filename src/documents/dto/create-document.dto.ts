@@ -1,5 +1,11 @@
-import { IsString, IsNotEmpty, IsUUID, IsUrl } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import {
+  IsString,
+  IsNotEmpty,
+  IsUUID,
+  IsUrl,
+  IsOptional,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateDocumentDto {
   @ApiProperty({
@@ -26,4 +32,12 @@ export class CreateDocumentDto {
   @IsUUID(4)
   @IsNotEmpty()
   sectionId: string;
+
+  @ApiPropertyOptional({
+    description: 'Google Drive file ID for synchronization',
+    example: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
+  })
+  @IsOptional()
+  @IsString()
+  driveId?: string;
 }

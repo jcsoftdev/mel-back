@@ -2,10 +2,13 @@ import { Module } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 import { PrismaModule } from '../prisma/prisma.module';
+import { GoogleDriveModule } from '../google-drive/google-drive.module';
+import { SectionsService } from '../sections/sections.service';
+import { DocumentsService } from '../documents/documents.service';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, GoogleDriveModule],
   controllers: [UsersController],
-  providers: [UsersService],
+  providers: [UsersService, SectionsService, DocumentsService],
 })
 export class UsersModule {}

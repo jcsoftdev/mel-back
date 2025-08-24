@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -13,6 +14,7 @@ import {
   ApiResponse,
   ApiParam,
   ApiBody,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -99,5 +101,23 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'User not found.' })
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);
+  }
+
+  @Post('sync')
+  @ApiOperation({ summary: 'Sync data from Google Drive' })
+  @ApiQuery({
+    name: 'folderId',
+    required: false,
+    description: 'Google Drive folder ID to sync from',
+    example: '1l8QTyWaaGiYgoSqRYP17WxPa5NBX_1d_',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Sync completed successfully.',
+  })
+  @ApiResponse({ status: 400, description: 'Bad Request.' })
+  @ApiResponse({ status: 500, description: 'Internal Server Error.' })
+  sync(@Query('folderId') folderId?: string) {
+    return this.usersService.sync(folderId);
   }
 }

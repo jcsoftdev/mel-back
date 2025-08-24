@@ -6,5 +6,6 @@ import { ConfigService } from 'src/config/config.service';
 @Module({
   controllers: [GoogleDriveController],
   providers: [GoogleDriveService, ConfigService],
+  exports: [GoogleDriveService],
 })
 export class GoogleDriveModule {}

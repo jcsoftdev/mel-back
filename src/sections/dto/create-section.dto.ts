@@ -17,4 +17,12 @@ export class CreateSectionDto {
   @IsOptional()
   @IsUUID(4)
   parentId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Google Drive folder ID for synchronization',
+    example: '1l8QTyWaaGiYgoSqRYP17WxPa5NBX_1d_',
+  })
+  @IsOptional()
+  @IsString()
+  driveId?: string;
 }

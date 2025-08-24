@@ -8,15 +8,6 @@ datasource db {
 }
 
 /**
- * ---------- Access model ----------
- */
-enum AccessLevel {
-  READ
-  WRITE
-  ADMIN
-}
-
-/**
  * ---------- Core models ----------
  */
 model User {
@@ -46,6 +37,7 @@ model Role {
 model Section {
   id        String   @id @default(uuid())
   name      String
+  driveId   String?  @unique // Google Drive folder ID for sync
   createdAt DateTime @default(now())
 
   // self-relation (folders)
@@ -62,12 +54,14 @@ model Section {
   @@unique([parentId, name])
   @@index([parentId])
   @@index([name])
+  @@index([driveId])
 }
 
 model Document {
   id        String   @id @default(uuid())
   title     String
   url       String
+  driveId   String?  @unique // Google Drive file ID for sync
   sectionId String
   createdAt DateTime @default(now())
 
@@ -77,6 +71,7 @@ model Document {
   roleGrants RoleDocumentAccess[]
 
   @@index([sectionId])
+  @@index([driveId])
 }
 
 /**
@@ -102,7 +97,6 @@ model RoleSectionAccess {
   id        String      @id @default(uuid())
   roleId    String
   sectionId String
-  level     AccessLevel @default(READ)
 
   role    Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
   section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
@@ -117,7 +111,6 @@ model RoleDocumentAccess {
   id         String      @id @default(uuid())
   roleId     String
   documentId String
-  level      AccessLevel @default(READ)
 
   role     Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)

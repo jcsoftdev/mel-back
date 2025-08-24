@@ -6,7 +6,6 @@ import {
   Patch,
   Param,
   Delete,
-  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -16,7 +15,6 @@ import {
   ApiBody,
   ApiQuery,
 } from '@nestjs/swagger';
-import { AccessLevel } from '@prisma/client';
 import { RolesService } from './roles.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
@@ -146,7 +144,6 @@ export class RolesController {
   @ApiParam({ name: 'documentId', description: 'Document ID', type: 'string' })
   @ApiQuery({
     name: 'level',
-    enum: AccessLevel,
     required: false,
     description: 'Access level (default: read)',
   })
@@ -155,9 +152,8 @@ export class RolesController {
   addDocumentAccess(
     @Param('id') roleId: string,
     @Param('documentId') documentId: string,
-    @Query('level') level?: AccessLevel,
   ) {
-    return this.rolesService.addDocumentAccess(roleId, documentId, level);
+    return this.rolesService.addDocumentAccess(roleId, documentId);
   }
 
   @Delete(':id/documents/:documentId')

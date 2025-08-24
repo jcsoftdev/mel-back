@@ -3,10 +3,19 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PatchUserRolesDto } from './dto/patch-user-roles.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { GoogleDriveService } from '../google-drive/google-drive.service';
+import { SectionsService } from '../sections/sections.service';
+import { DocumentsService } from '../documents/documents.service';
+import { GoogleDriveDirectoryDto } from '../google-drive/google-drive.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private googleDriveService: GoogleDriveService,
+    private sectionsService: SectionsService,
+    private documentsService: DocumentsService,
+  ) {}
 
   async create(createUserDto: CreateUserDto) {
     try {
@@ -205,5 +214,93 @@ export class UsersService {
         error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Failed to patch user roles: ${errorMessage}`);
     }
+  }
+
+  async sync(folderId: string = '1l8QTyWaaGiYgoSqRYP17WxPa5NBX_1d_') {
+    try {
+      // Get the directory tree from Google Drive
+      const directoryTree =
+        await this.googleDriveService.getDirectoryTree(folderId);
+
+      // Sync the tree recursively
+      await this.syncDirectoryTree(directoryTree, null);
+
+      return { message: 'Sync completed successfully' };
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to sync with Google Drive: ${errorMessage}`);
+    }
+  }
+
+  private async syncDirectoryTree(
+    item: GoogleDriveDirectoryDto,
+    parentSectionId: string | null,
+  ): Promise<void> {
+    if (item.mimeType === 'application/vnd.google-apps.folder') {
+      try {
+        // Use upsert for better performance and atomic operation
+        const section = await this.prisma.section.upsert({
+          where: {
+            driveId: item.id,
+          },
+          update: {
+            name: item.name,
+            parentId: parentSectionId || undefined,
+          },
+          create: {
+            driveId: item.id,
+            name: item.name,
+            parentId: parentSectionId || undefined,
+          },
+          select: {
+            id: true,
+            name: true,
+          },
+        });
+
+        // Process children in parallel for better performance
+        if (item.children && item.children.length > 0) {
+          await Promise.all(
+            item.children.map((child) =>
+              this.syncDirectoryTree(child, section.id),
+            ),
+          );
+        }
+      } catch (error: unknown) {
+        console.error(`Error syncing folder ${item.name}:`, error);
+        throw error;
+      }
+    } else if (item.mimeType === 'application/pdf') {
+      try {
+        // Use upsert for better performance and atomic operation
+        if (parentSectionId) {
+          await this.prisma.document.upsert({
+            where: {
+              driveId: item.id,
+            },
+            update: {
+              title: item.name,
+              url: item.downloadUrl || undefined,
+              sectionId: parentSectionId,
+            },
+            create: {
+              driveId: item.id,
+              title: item.name,
+              url:
+                item.downloadUrl ||
+                `https://drive.google.com/file/d/${item.id}/view`,
+              sectionId: parentSectionId,
+            },
+          });
+        }
+      } catch (error: unknown) {
+        console.error(`Error syncing document ${item.name}:`, error);
+        throw error;
+      }
+      // Documents don't have children, so return early
+      return;
+    }
+    // Ignore other file types (not folders or PDFs)
   }
 }

@@ -12,7 +12,14 @@ import { SectionTree } from './types/section.types';
 interface SectionWithRelations extends Section {
   parent?: Section | null;
   children?: SectionWithRelations[];
-  documents?: any[];
+  documents?: {
+    id: string;
+    title: string;
+    url: string;
+    driveId?: string | null;
+    sectionId: string;
+    createdAt: Date;
+  }[];
   roleGrants?: any[];
 }
 
@@ -270,6 +277,15 @@ export class SectionsService {
       name: section.name,
       parentId: section.parentId,
       documentCount: section.documents?.length || 0,
+      documents:
+        section.documents?.map((doc) => ({
+          id: doc.id,
+          title: doc.title,
+          url: doc.url,
+          driveId: doc.driveId,
+          sectionId: doc.sectionId,
+          createdAt: doc.createdAt,
+        })) || [],
       children: section.children ? this.buildSectionTree(section.children) : [],
     }));
   }

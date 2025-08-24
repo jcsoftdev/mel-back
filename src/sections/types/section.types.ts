@@ -4,6 +4,14 @@ export interface SectionTree {
   parentId: string | null;
   children: SectionTree[];
   documentCount: number;
+  documents: {
+    id: string;
+    title: string;
+    url: string;
+    driveId?: string | null;
+    sectionId: string;
+    createdAt: Date;
+  }[];
 }
 
 export interface SectionWithRelations {
