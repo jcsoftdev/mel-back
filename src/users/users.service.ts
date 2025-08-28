@@ -7,6 +7,7 @@ import { GoogleDriveService } from '../google-drive/google-drive.service';
 import { SectionsService } from '../sections/sections.service';
 import { DocumentsService } from '../documents/documents.service';
 import { GoogleDriveDirectoryDto } from '../google-drive/google-drive.dto';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
@@ -17,16 +18,44 @@ export class UsersService {
     private documentsService: DocumentsService,
   ) {}
 
+  private async hashPassword(password: string): Promise<string> {
+    const saltRounds = 12;
+    return await bcrypt.hash(password, saltRounds);
+  }
+
   async create(createUserDto: CreateUserDto) {
     try {
-      const { roleIds, ...userData } = createUserDto;
+      const { roleIds, password, ...userData } = createUserDto;
+
+      const hashedPassword = await this.hashPassword(password);
+
+      // Validate that all role IDs exist if provided
+      if (roleIds && roleIds.length > 0) {
+        const existingRoles = await this.prisma.role.findMany({
+          where: { id: { in: roleIds } },
+          select: { id: true },
+        });
+
+        const existingRoleIds = existingRoles.map((role) => role.id);
+        const invalidRoleIds = roleIds.filter(
+          (roleId) => !existingRoleIds.includes(roleId),
+        );
+
+        if (invalidRoleIds.length > 0) {
+          throw new Error(`Invalid role IDs: ${invalidRoleIds.join(', ')}`);
+        }
+      }
+
       return await this.prisma.user.create({
         data: {
           ...userData,
+          password: hashedPassword,
           ...(roleIds &&
             roleIds.length > 0 && {
               roles: {
-                connect: roleIds.map((id) => ({ id })),
+                create: roleIds.map((roleId) => ({
+                  roleId,
+                })),
               },
             }),
         },
@@ -107,9 +136,17 @@ export class UsersService {
       if (!user) {
         throw new NotFoundException(`User with ID ${id} not found`);
       }
+
+      const updateData = { ...updateUserDto };
+
+      // Hash password if it's being updated
+      if (updateUserDto.password) {
+        updateData.password = await this.hashPassword(updateUserDto.password);
+      }
+
       return await this.prisma.user.update({
         where: { id },
-        data: updateUserDto,
+        data: updateData,
         select: {
           id: true,
           name: true,

@@ -20,6 +20,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PatchUserRolesDto } from './dto/patch-user-roles.dto';
+import { User } from './entities/user.entity';
 
 @ApiTags('users')
 @Controller('users')
@@ -32,6 +33,7 @@ export class UsersController {
   @ApiResponse({
     status: 201,
     description: 'User has been successfully created.',
+    type: User,
   })
   @ApiResponse({ status: 400, description: 'Bad Request.' })
   create(@Body() createUserDto: CreateUserDto) {
@@ -43,6 +45,7 @@ export class UsersController {
   @ApiResponse({
     status: 200,
     description: 'Return all users.',
+    type: [User],
   })
   findAll() {
     return this.usersService.findAll();
@@ -54,6 +57,7 @@ export class UsersController {
   @ApiResponse({
     status: 200,
     description: 'Return the user.',
+    type: User,
   })
   @ApiResponse({ status: 404, description: 'User not found.' })
   findOne(@Param('id') id: string) {
@@ -67,6 +71,7 @@ export class UsersController {
   @ApiResponse({
     status: 200,
     description: 'User has been successfully updated.',
+    type: User,
   })
   @ApiResponse({ status: 404, description: 'User not found.' })
   @ApiResponse({ status: 400, description: 'Bad Request.' })
@@ -81,6 +86,7 @@ export class UsersController {
   @ApiResponse({
     status: 200,
     description: 'User roles have been successfully updated.',
+    type: User,
   })
   @ApiResponse({ status: 404, description: 'User not found.' })
   @ApiResponse({ status: 400, description: 'Bad Request.' })

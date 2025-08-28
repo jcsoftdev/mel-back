@@ -7,49 +7,36 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/**
- * ---------- Core models ----------
- */
+/// *
+///  * ---------- Core models ----------
 model User {
-  id        String   @id @default(uuid())
+  id        String     @id @default(uuid())
   name      String
-  email     String   @unique
+  email     String     @unique
   password  String
-  createdAt DateTime @default(now())
-
-  // User <-> Role (global, not per-section)
-  roles UserRole[]
+  createdAt DateTime   @default(now())
+  roles     UserRole[]
 }
 
 model Role {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  createdAt DateTime @default(now())
-
-  // Members
-  userRoles UserRole[]
-
-  // Grants
-  sectionAccess  RoleSectionAccess[]
+  id             String               @id @default(uuid())
+  name           String               @unique
+  createdAt      DateTime             @default(now())
   documentAccess RoleDocumentAccess[]
+  sectionAccess  RoleSectionAccess[]
+  userRoles      UserRole[]
 }
 
 model Section {
-  id        String   @id @default(uuid())
-  name      String
-  driveId   String?  @unique // Google Drive folder ID for sync
-  createdAt DateTime @default(now())
-
-  // self-relation (folders)
-  parentId String?
-  parent   Section?  @relation("SectionChildren", fields: [parentId], references: [id], onDelete: Cascade)
-  children Section[] @relation("SectionChildren")
-
-  // contents
-  documents Document[]
-
-  // role grants
+  id         String              @id @default(uuid())
+  name       String
+  createdAt  DateTime            @default(now())
+  parentId   String?
+  driveId    String?             @unique
+  documents  Document[]
   roleGrants RoleSectionAccess[]
+  parent     Section?            @relation("SectionChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children   Section[]           @relation("SectionChildren")
 
   @@unique([parentId, name])
   @@index([parentId])
@@ -58,62 +45,49 @@ model Section {
 }
 
 model Document {
-  id        String   @id @default(uuid())
-  title     String
-  url       String
-  driveId   String?  @unique // Google Drive file ID for sync
-  sectionId String
-  createdAt DateTime @default(now())
-
-  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-
-  // role grants
+  id         String               @id @default(uuid())
+  title      String
+  url        String
+  sectionId  String
+  createdAt  DateTime             @default(now())
+  driveId    String?              @unique
+  section    Section              @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   roleGrants RoleDocumentAccess[]
 
   @@index([sectionId])
   @@index([driveId])
 }
 
-/**
- * ---------- Join / grant tables ----------
- */
-
-// Users ↔ Roles (global membership)
 model UserRole {
   id     String @id @default(uuid())
   userId String
   roleId String
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, roleId])
   @@index([userId])
   @@index([roleId])
 }
 
-// Role → Section grant (applies to that section; your app can inherit to children)
 model RoleSectionAccess {
-  id        String      @id @default(uuid())
+  id        String  @id @default(uuid())
   roleId    String
   sectionId String
-
-  role    Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  role      Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  section   Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
   @@unique([roleId, sectionId])
   @@index([roleId])
   @@index([sectionId])
 }
 
-// Role → Document grant
 model RoleDocumentAccess {
-  id         String      @id @default(uuid())
+  id         String   @id @default(uuid())
   roleId     String
   documentId String
-
-  role     Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([roleId, documentId])
   @@index([roleId])

@@ -107,7 +107,7 @@ describe('AuthController', () => {
   describe('getProfile', () => {
     const mockRequest = {
       user: {
-        userId: '1',
+        id: '1',
       },
     };
 
