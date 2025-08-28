@@ -15,7 +15,7 @@ export class AuthResponseDto {
     email: string;
     firstName?: string;
     lastName?: string;
-    role: string;
+    roles: string[];
     createdAt: Date;
     updatedAt: Date;
   };
@@ -49,10 +49,11 @@ export class ProfileResponseDto {
   lastName?: string;
 
   @ApiProperty({
-    description: 'User role',
-    example: 'USER',
+    description: 'User roles',
+    example: ['USER', 'ADMIN'],
+    type: [String],
   })
-  role: string;
+  roles: string[];
 
   @ApiProperty({
     description: 'Account creation date',

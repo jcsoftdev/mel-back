@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Query,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,6 +22,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PatchUserRolesDto } from './dto/patch-user-roles.dto';
 import { User } from './entities/user.entity';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @ApiTags('users')
 @Controller('users')
@@ -105,7 +107,11 @@ export class UsersController {
     description: 'User has been successfully deleted.',
   })
   @ApiResponse({ status: 404, description: 'User not found.' })
-  remove(@Param('id') id: string) {
+  @ApiResponse({ status: 400, description: 'Cannot delete yourself.' })
+  remove(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    if (user.id === id) {
+      throw new BadRequestException('Cannot delete yourself');
+    }
     return this.usersService.remove(id);
   }
 

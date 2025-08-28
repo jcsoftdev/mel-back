@@ -20,7 +20,7 @@ describe('AuthController', () => {
       email: 'john@example.com',
       firstName: 'John',
       lastName: 'Doe',
-      role: 'USER',
+      roles: ['USER'],
       createdAt: new Date(),
       updatedAt: new Date(),
     },
@@ -31,7 +31,7 @@ describe('AuthController', () => {
     email: 'john@example.com',
     firstName: 'John',
     lastName: 'Doe',
-    role: 'USER',
+    roles: ['USER'],
     createdAt: new Date(),
     updatedAt: new Date(),
   };

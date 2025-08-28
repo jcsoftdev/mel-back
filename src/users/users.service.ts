@@ -7,7 +7,7 @@ import { GoogleDriveService } from '../google-drive/google-drive.service';
 import { SectionsService } from '../sections/sections.service';
 import { DocumentsService } from '../documents/documents.service';
 import { GoogleDriveDirectoryDto } from '../google-drive/google-drive.dto';
-import * as bcrypt from 'bcrypt';
+import { hashPassword } from '../common/utils/password.util';
 
 @Injectable()
 export class UsersService {
@@ -18,16 +18,11 @@ export class UsersService {
     private documentsService: DocumentsService,
   ) {}
 
-  private async hashPassword(password: string): Promise<string> {
-    const saltRounds = 12;
-    return await bcrypt.hash(password, saltRounds);
-  }
-
   async create(createUserDto: CreateUserDto) {
     try {
       const { roleIds, password, ...userData } = createUserDto;
 
-      const hashedPassword = await this.hashPassword(password);
+      const hashedPassword = await hashPassword(password);
 
       // Validate that all role IDs exist if provided
       if (roleIds && roleIds.length > 0) {
@@ -141,7 +136,7 @@ export class UsersService {
 
       // Hash password if it's being updated
       if (updateUserDto.password) {
-        updateData.password = await this.hashPassword(updateUserDto.password);
+        updateData.password = await hashPassword(updateUserDto.password);
       }
 
       return await this.prisma.user.update({

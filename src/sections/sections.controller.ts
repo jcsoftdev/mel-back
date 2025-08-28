@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -14,16 +15,21 @@ import {
   ApiParam,
   ApiQuery,
   ApiResponse,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { SectionsService } from './sections.service';
 import { CreateSectionDto } from './dto/create-section.dto';
 import { UpdateSectionDto } from './dto/update-section.dto';
-import { SectionTree } from './types/section.types';
 import { Section } from './entities/section.entity';
+import { SectionTree } from './types/section.types';
 import { SectionTreeResponseDto } from './dto/section-tree-response.dto';
 
 @ApiTags('sections')
 @Controller('sections')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth('JWT-auth')
 export class SectionsController {
   constructor(private readonly sectionsService: SectionsService) {}
 
@@ -51,24 +57,30 @@ export class SectionsController {
     description: 'Sections retrieved successfully',
     type: [Section],
   })
-  findAll(@Query('parentId') parentId?: string) {
-    return this.sectionsService.findAll(parentId);
+  findAll(
+    @CurrentUser() user: { roles: string[] },
+    @Query('parentId') parentId?: string,
+  ) {
+    if (user.roles.includes('admin')) {
+      return this.sectionsService.findAll(parentId);
+    }
+    return this.sectionsService.findAllByUserRoles(user.roles, parentId);
   }
 
   @Get('tree')
-  @ApiOperation({ summary: 'Get section tree hierarchy' })
-  @ApiQuery({
-    name: 'rootId',
-    required: false,
-    description: 'Root section ID for tree',
-  })
+  @ApiOperation({ summary: 'Get section tree' })
   @ApiResponse({
     status: 200,
-    description: 'Section tree retrieved successfully',
+    description: 'Section tree',
     type: [SectionTreeResponseDto],
   })
-  getSectionTree(@Query('rootId') rootId?: string): Promise<SectionTree[]> {
-    return this.sectionsService.getSectionTree(rootId);
+  getSectionTree(
+    @CurrentUser() user: { roles: string[] },
+  ): Promise<SectionTree[]> {
+    if (user.roles.includes('admin')) {
+      return this.sectionsService.getSectionTree();
+    }
+    return this.sectionsService.getSectionTreeByUserRoles(user.roles);
   }
 
   @Get(':id')

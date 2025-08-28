@@ -2,10 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { RoleAccessService } from '../common/services/role-access.service';
 
 @Injectable()
 export class DocumentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly roleAccessService: RoleAccessService,
+  ) {}
 
   async create(createDocumentDto: CreateDocumentDto) {
     return await this.prisma.document.create({
@@ -23,6 +27,34 @@ export class DocumentsService {
 
   async findAll() {
     return await this.prisma.document.findMany({
+      include: {
+        section: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
+
+  async findAllByUserRoles(userRoles: string[]) {
+    const accessibleDocumentIds =
+      await this.roleAccessService.getUserAccessibleDocumentIds(userRoles);
+
+    if (accessibleDocumentIds.length === 0) {
+      return [];
+    }
+
+    return await this.prisma.document.findMany({
+      where: {
+        id: {
+          in: accessibleDocumentIds,
+        },
+      },
       include: {
         section: {
           select: {
@@ -85,6 +117,35 @@ export class DocumentsService {
   async findBySection(sectionId: string) {
     return await this.prisma.document.findMany({
       where: { sectionId },
+      include: {
+        section: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
+
+  async findBySectionAndUserRoles(sectionId: string, userRoles: string[]) {
+    const accessibleDocumentIds =
+      await this.roleAccessService.getUserAccessibleDocumentIds(userRoles);
+
+    if (accessibleDocumentIds.length === 0) {
+      return [];
+    }
+
+    return await this.prisma.document.findMany({
+      where: {
+        sectionId,
+        id: {
+          in: accessibleDocumentIds,
+        },
+      },
       include: {
         section: {
           select: {

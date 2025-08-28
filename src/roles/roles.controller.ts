@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -77,7 +78,12 @@ export class RolesController {
   @ApiParam({ name: 'id', description: 'Role ID', type: 'string' })
   @ApiResponse({ status: 200, description: 'Role deleted successfully' })
   @ApiResponse({ status: 404, description: 'Role not found' })
-  remove(@Param('id') id: string) {
+  @ApiResponse({ status: 400, description: 'Cannot delete admin role' })
+  async remove(@Param('id') id: string) {
+    const role = await this.rolesService.findOne(id);
+    if (role && role.name === 'admin') {
+      throw new BadRequestException('Cannot delete admin role');
+    }
     return this.rolesService.remove(id);
   }
 

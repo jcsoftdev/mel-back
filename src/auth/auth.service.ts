@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto, RegisterDto, AuthResponseDto } from './dto';
+import { hashPassword } from '../common/utils/password.util';
 
 @Injectable()
 export class AuthService {
@@ -29,8 +30,7 @@ export class AuthService {
     }
 
     // Hash password
-    const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const hashedPassword = await hashPassword(password);
 
     // Create user with name from firstName and lastName
     const name =
@@ -67,7 +67,7 @@ export class AuthService {
           email: user.email,
           firstName: firstName || undefined,
           lastName: lastName || undefined,
-          role: user.roles.length > 0 ? user.roles[0].role.name : 'USER',
+          roles: user.roles.map((userRole) => userRole.role.name),
           createdAt: user.createdAt,
           updatedAt: user.createdAt, // Since there's no updatedAt in schema
         },
@@ -122,7 +122,7 @@ export class AuthService {
         email: user.email,
         firstName: firstName || undefined,
         lastName: lastName || undefined,
-        role: user.roles.length > 0 ? user.roles[0].role.name : 'USER',
+        roles: user.roles.map((userRole) => userRole.role.name),
         createdAt: user.createdAt,
         updatedAt: user.createdAt, // Since there's no updatedAt in schema
       },
@@ -156,7 +156,6 @@ export class AuthService {
       email: user.email,
       firstName,
       lastName,
-      role: user.roles.length > 0 ? user.roles[0].role.name : 'USER',
       roles: user.roles.map((userRole) => userRole.role.name),
       createdAt: user.createdAt,
       updatedAt: user.createdAt, // Since there's no updatedAt in schema

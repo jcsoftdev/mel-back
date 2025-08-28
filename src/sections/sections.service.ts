@@ -8,6 +8,7 @@ import { UpdateSectionDto } from './dto/update-section.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { Section } from '@prisma/client';
 import { SectionTree } from './types/section.types';
+import { RoleAccessService } from '../common/services/role-access.service';
 
 interface SectionWithRelations extends Section {
   parent?: Section | null;
@@ -25,7 +26,10 @@ interface SectionWithRelations extends Section {
 
 @Injectable()
 export class SectionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly roleAccessService: RoleAccessService,
+  ) {}
   async create(createSectionDto: CreateSectionDto): Promise<Section> {
     const { name, parentId } = createSectionDto;
 
@@ -79,6 +83,56 @@ export class SectionsService {
         children: {
           include: {
             children: true,
+            documents: true,
+          },
+        },
+        documents: true,
+        roleGrants: {
+          include: {
+            role: true,
+          },
+        },
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+  }
+
+  async findAllByUserRoles(
+    userRoles: string[],
+    parentId?: string,
+  ): Promise<Section[]> {
+    const accessibleSectionIds =
+      await this.roleAccessService.getUserAccessibleSectionIds(userRoles);
+
+    if (accessibleSectionIds.length === 0) {
+      return [];
+    }
+
+    return this.prisma.section.findMany({
+      where: {
+        id: {
+          in: accessibleSectionIds,
+        },
+        parentId: parentId || null,
+      },
+      include: {
+        parent: true,
+        children: {
+          where: {
+            id: {
+              in: accessibleSectionIds,
+            },
+          },
+          include: {
+            children: {
+              where: {
+                id: {
+                  in: accessibleSectionIds,
+                },
+              },
+            },
             documents: true,
           },
         },
@@ -268,11 +322,187 @@ export class SectionsService {
       },
     });
 
-    return this.buildSectionTree(sections);
+    return this.buildSectionTree(sections)[0].children;
+  }
+
+  async getSectionTreeByUserRoles(
+    userRoles: string[],
+    rootId?: string,
+  ): Promise<SectionTree[]> {
+    const { allSectionIds, directSectionIds, documentIds } =
+      await this.roleAccessService.getUserRoleAccessData(userRoles);
+
+    if (allSectionIds.length === 0 && documentIds.length === 0) {
+      return [];
+    }
+
+    const sectionsWithDirectAccess = new Set(directSectionIds);
+    const documentsWithDirectAccess = new Set(documentIds);
+
+    const descendantSectionIds =
+      await this.getDescendantSections(directSectionIds);
+    const allRelevantSectionIds = [
+      ...new Set([...allSectionIds, ...descendantSectionIds]),
+    ];
+
+    const [allSections, allDocuments] = await Promise.all([
+      this.prisma.section.findMany({
+        where: {
+          id: {
+            in: allRelevantSectionIds,
+          },
+        },
+        orderBy: {
+          name: 'asc',
+        },
+      }),
+      this.prisma.document.findMany({
+        where: {
+          sectionId: {
+            in: allRelevantSectionIds,
+          },
+        },
+        select: {
+          id: true,
+          title: true,
+          url: true,
+          driveId: true,
+          sectionId: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    const sectionsWithDocuments = allSections.map((section) => {
+      const hasDirectSectionAccess = sectionsWithDirectAccess.has(section.id);
+      const isDescendantOfDirectAccess = this.isDescendantOfDirectAccess(
+        section,
+        directSectionIds,
+        allSections,
+      );
+
+      let sectionDocuments: {
+        id: string;
+        title: string;
+        url: string;
+        driveId?: string | null;
+        sectionId: string;
+        createdAt: Date;
+      }[];
+      if (hasDirectSectionAccess) {
+        // If user has direct access to section, show all documents
+        sectionDocuments = allDocuments.filter(
+          (doc) => doc.sectionId === section.id,
+        );
+      } else if (isDescendantOfDirectAccess) {
+        // If section is descendant of direct access, show all documents
+        sectionDocuments = allDocuments.filter(
+          (doc) => doc.sectionId === section.id,
+        );
+      } else {
+        // For other sections, only show documents with direct access
+        sectionDocuments = allDocuments.filter(
+          (doc) =>
+            doc.sectionId === section.id &&
+            documentsWithDirectAccess.has(doc.id),
+        );
+      }
+
+      return {
+        ...section,
+        documents: sectionDocuments,
+      } as SectionWithRelations;
+    });
+
+    const sectionsWithAccessibleChildren = new Set<string>();
+
+    sectionsWithDocuments.forEach((section) => {
+      const hasDirectSectionAccess = sectionsWithDirectAccess.has(section.id);
+      const hasDocumentsWithAccess = (section.documents || []).length > 0;
+
+      if (hasDirectSectionAccess || hasDocumentsWithAccess) {
+        let currentParentId = section.parentId;
+        while (currentParentId) {
+          sectionsWithAccessibleChildren.add(currentParentId);
+          const parentSection = sectionsWithDocuments.find(
+            (s) => s.id === currentParentId,
+          );
+          currentParentId = parentSection?.parentId || null;
+        }
+      }
+    });
+
+    const filteredSections = sectionsWithDocuments.filter((section) => {
+      const hasDirectSectionAccess = sectionsWithDirectAccess.has(section.id);
+      const hasDocumentsWithAccess = (section.documents || []).length > 0;
+      const hasAccessibleChildren = sectionsWithAccessibleChildren.has(
+        section.id,
+      );
+
+      return (
+        hasDirectSectionAccess ||
+        hasDocumentsWithAccess ||
+        hasAccessibleChildren
+      );
+    });
+
+    const rootSections = filteredSections.filter(
+      (section) => section.parentId === (rootId || null),
+    );
+
+    return this.buildOptimizedSectionTree(rootSections, filteredSections)?.[0]
+      ?.children;
+  }
+
+  private async getDescendantSections(sectionIds: string[]): Promise<string[]> {
+    if (sectionIds.length === 0) {
+      return [];
+    }
+
+    const descendants = new Set<string>();
+    let currentIds = [...sectionIds];
+
+    while (currentIds.length > 0) {
+      const children = await this.prisma.section.findMany({
+        where: {
+          parentId: {
+            in: currentIds,
+          },
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      const childIds = children.map((child) => child.id);
+      childIds.forEach((id) => descendants.add(id));
+      currentIds = childIds;
+    }
+
+    return Array.from(descendants);
+  }
+
+  private isDescendantOfDirectAccess(
+    section: Section,
+    directSectionIds: string[],
+    allSections: Section[],
+  ): boolean {
+    let currentParentId = section.parentId;
+
+    while (currentParentId) {
+      if (directSectionIds.includes(currentParentId)) {
+        return true;
+      }
+
+      const parentSection = allSections.find((s) => s.id === currentParentId);
+      currentParentId = parentSection?.parentId || null;
+    }
+
+    return false;
   }
 
   private buildSectionTree(sections: SectionWithRelations[]): SectionTree[] {
-    return sections.map((section) => ({
+    const returnSections = sections.map((section) => ({
       id: section.id,
       name: section.name,
       parentId: section.parentId,
@@ -287,6 +517,52 @@ export class SectionsService {
           createdAt: doc.createdAt,
         })) || [],
       children: section.children ? this.buildSectionTree(section.children) : [],
+      driveId: section.driveId,
+    }));
+    return returnSections;
+  }
+
+  private buildOptimizedSectionTree(
+    rootSections: SectionWithRelations[],
+    allSections: SectionWithRelations[],
+  ): SectionTree[] {
+    const buildChildren = (parentId: string): SectionTree[] => {
+      const children = allSections.filter(
+        (section) => section.parentId === parentId,
+      );
+      return children.map((section) => ({
+        id: section.id,
+        name: section.name,
+        parentId: section.parentId,
+        documentCount: section.documents?.length || 0,
+        documents:
+          section.documents?.map((doc) => ({
+            id: doc.id,
+            title: doc.title,
+            url: doc.url,
+            driveId: doc.driveId,
+            sectionId: doc.sectionId,
+            createdAt: doc.createdAt,
+          })) || [],
+        children: buildChildren(section.id),
+      }));
+    };
+
+    return rootSections.map((section) => ({
+      id: section.id,
+      name: section.name,
+      parentId: section.parentId,
+      documentCount: section.documents?.length || 0,
+      documents:
+        section.documents?.map((doc) => ({
+          id: doc.id,
+          title: doc.title,
+          url: doc.url,
+          driveId: doc.driveId,
+          sectionId: doc.sectionId,
+          createdAt: doc.createdAt,
+        })) || [],
+      children: buildChildren(section.id),
     }));
   }
 }

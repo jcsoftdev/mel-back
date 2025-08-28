@@ -99,12 +99,10 @@ export class RolesService {
   }
 
   async removeSectionAccess(roleId: string, sectionId: string) {
-    return await this.prisma.roleSectionAccess.delete({
+    return await this.prisma.roleSectionAccess.deleteMany({
       where: {
-        roleId_sectionId: {
-          roleId,
-          sectionId,
-        },
+        roleId,
+        sectionId,
       },
     });
   }
@@ -138,12 +136,10 @@ export class RolesService {
   }
 
   async removeDocumentAccess(roleId: string, documentId: string) {
-    return await this.prisma.roleDocumentAccess.delete({
+    return await this.prisma.roleDocumentAccess.deleteMany({
       where: {
-        roleId_documentId: {
-          roleId,
-          documentId,
-        },
+        roleId,
+        documentId,
       },
     });
   }

@@ -7,15 +7,19 @@ import {
   Param,
   Delete,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
-  ApiResponse,
   ApiParam,
   ApiQuery,
+  ApiResponse,
   ApiBody,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { DocumentsService } from './documents.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
@@ -23,6 +27,8 @@ import { Document } from './entities/document.entity';
 
 @ApiTags('documents')
 @Controller('documents')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth('JWT-auth')
 export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
@@ -53,11 +59,23 @@ export class DocumentsController {
     description: 'List of documents retrieved successfully',
     type: [Document],
   })
-  async findAll(@Query('sectionId') sectionId?: string) {
-    if (sectionId) {
-      return await this.documentsService.findBySection(sectionId);
+  async findAll(
+    @CurrentUser() user: { roles: string[] },
+    @Query('sectionId') sectionId?: string,
+  ) {
+    if (user.roles.includes('admin')) {
+      if (sectionId) {
+        return await this.documentsService.findBySection(sectionId);
+      }
+      return await this.documentsService.findAll();
     }
-    return await this.documentsService.findAll();
+    if (sectionId) {
+      return await this.documentsService.findBySectionAndUserRoles(
+        sectionId,
+        user.roles,
+      );
+    }
+    return await this.documentsService.findAllByUserRoles(user.roles);
   }
 
   @Get(':id')
