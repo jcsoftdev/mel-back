@@ -49,4 +49,13 @@ export class CreateFormDto {
   @ValidateNested({ each: true })
   @Type(() => CreateFormFieldDto)
   fields: CreateFormFieldDto[];
+
+  @ApiProperty({
+    description: 'Drive folder ID',
+    example: 'drive123abc',
+    type: String,
+  })
+  @IsString({ message: 'Drive ID must be a string' })
+  @IsNotEmpty({ message: 'Drive ID is required' })
+  driveId: string;
 }

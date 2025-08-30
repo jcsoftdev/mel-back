@@ -13,7 +13,8 @@ export class FormsService {
         data: {
           title: createFormDto.title,
           description: createFormDto.description,
-          isActive: createFormDto.isActive ?? true,
+          isActive: createFormDto.isActive ?? false,
+          driveId: createFormDto.driveId,
         },
       });
 
