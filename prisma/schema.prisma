@@ -93,3 +93,91 @@ model RoleDocumentAccess {
   @@index([roleId])
   @@index([documentId])
 }
+
+/// *
+///  * ---------- Form Management models ----------
+model Form {
+  id          String           @id @default(uuid())
+  title       String
+  description String?
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  driveId     String?          @unique
+  fields      FormField[]
+  submissions FormSubmission[]
+
+  @@index([title])
+  @@index([isActive])
+  @@index([driveId])
+}
+
+model FormField {
+  id           String                @id @default(uuid())
+  formId       String
+  fieldType    FormFieldType
+  label        String
+  placeholder  String?
+  isRequired   Boolean               @default(false)
+  order        Int
+  options      Json?                 // For select fields
+  validation   Json?                 // Validation rules
+  createdAt    DateTime              @default(now())
+  form         Form                  @relation(fields: [formId], references: [id], onDelete: Cascade)
+  submissions  FormSubmissionField[]
+
+  @@unique([formId, order])
+  @@index([formId])
+  @@index([fieldType])
+}
+
+model FormSubmission {
+  id          String                @id @default(uuid())
+  formId      String
+  submittedAt DateTime              @default(now())
+  ipAddress   String?
+  userAgent   String?
+  form        Form                  @relation(fields: [formId], references: [id], onDelete: Cascade)
+  fields      FormSubmissionField[]
+  files       FileMetadata[]
+
+  @@index([formId])
+  @@index([submittedAt])
+}
+
+model FormSubmissionField {
+  id           String         @id @default(uuid())
+  submissionId String
+  fieldId      String
+  value        String?
+  submission   FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  field        FormField      @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, fieldId])
+  @@index([submissionId])
+  @@index([fieldId])
+}
+
+model FileMetadata {
+  id           String          @id @default(uuid())
+  submissionId String
+  fieldId      String
+  originalName String
+  fileName     String
+  mimeType     String
+  size         Int
+  driveId      String          @unique
+  driveUrl     String
+  uploadedAt   DateTime        @default(now())
+  submission   FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@index([fieldId])
+  @@index([driveId])
+}
+
+enum FormFieldType {
+  SELECT
+  INPUT_TEXT
+  INPUT_FILE
+}

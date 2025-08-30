@@ -4,9 +4,9 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { PatchUserRolesDto } from './dto/patch-user-roles.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { GoogleDriveService } from '../google-drive/google-drive.service';
-import { SectionsService } from '../sections/sections.service';
-import { DocumentsService } from '../documents/documents.service';
 import { GoogleDriveDirectoryDto } from '../google-drive/google-drive.dto';
+import { FormsService } from '../forms/services/forms.service';
+import { CreateFormDto } from '../forms/dto/create-form.dto';
 import { hashPassword } from '../common/utils/password.util';
 
 @Injectable()
@@ -14,8 +14,7 @@ export class UsersService {
   constructor(
     private prisma: PrismaService,
     private googleDriveService: GoogleDriveService,
-    private sectionsService: SectionsService,
-    private documentsService: DocumentsService,
+    private formsService: FormsService,
   ) {}
 
   async create(createUserDto: CreateUserDto) {
@@ -269,70 +268,121 @@ export class UsersService {
     item: GoogleDriveDirectoryDto,
     parentSectionId: string | null,
   ): Promise<void> {
-    if (item.mimeType === 'application/vnd.google-apps.folder') {
-      try {
-        // Use upsert for better performance and atomic operation
-        const section = await this.prisma.section.upsert({
-          where: {
-            driveId: item.id,
-          },
-          update: {
-            name: item.name,
-            parentId: parentSectionId || undefined,
-          },
-          create: {
-            driveId: item.id,
-            name: item.name,
-            parentId: parentSectionId || undefined,
-          },
-          select: {
-            id: true,
-            name: true,
-          },
-        });
+    // `item` now represents a folder node with optional `directories` and `files`.
+    // Upsert the folder as a Section and then process its children.
+    console.log({ item, parentSectionId });
 
-        // Process children in parallel for better performance
-        if (item.children && item.children.length > 0) {
-          await Promise.all(
-            item.children.map((child) =>
-              this.syncDirectoryTree(child, section.id),
-            ),
-          );
-        }
-      } catch (error: unknown) {
-        console.error(`Error syncing folder ${item.name}:`, error);
-        throw error;
-      }
-    } else if (item.mimeType === 'application/pdf') {
+    try {
+      const section = await this.prisma.section.upsert({
+        where: { driveId: item.id },
+        update: {
+          name: item.name,
+          parentId: parentSectionId || undefined,
+        },
+        create: {
+          driveId: item.id,
+          name: item.name,
+          parentId: parentSectionId || undefined,
+        },
+        select: { id: true, name: true },
+      });
+
+      console.log(`Synced folder: ${item.name}`);
+
+      // If the folder is named like `form_<name>`, create a corresponding form
       try {
-        // Use upsert for better performance and atomic operation
-        if (parentSectionId) {
-          await this.prisma.document.upsert({
-            where: {
-              driveId: item.id,
-            },
-            update: {
-              title: item.name,
-              url: item.downloadUrl || undefined,
-              sectionId: parentSectionId,
-            },
-            create: {
-              driveId: item.id,
-              title: item.name,
-              url:
-                item.downloadUrl ||
-                `https://drive.google.com/file/d/${item.id}/view`,
-              sectionId: parentSectionId,
-            },
+        const formMatch = item.name.match(/^form_(.+)$/i);
+        console.log(
+          `Found form folder: ${item.name}: ${formMatch ? 'Matched' : 'Not Matched'}`,
+        );
+        if (formMatch) {
+          const rawTitle = formMatch[1].trim();
+          const title = rawTitle.replace(/[_-]+/g, ' ').trim();
+
+          // Avoid creating duplicate forms for the same Drive folder
+          const existingForm = await this.prisma.form.findUnique({
+            where: { driveId: item.id },
+            select: { id: true },
           });
+
+          if (!existingForm) {
+            const createFormDto: CreateFormDto = {
+              title,
+              description: `Form created from Drive folder ${item.name}`,
+              driveId: item.id,
+              fields: [],
+              isActive: false,
+            } as CreateFormDto;
+
+            try {
+              await this.formsService.create(createFormDto);
+            } catch (createErr) {
+              console.error(
+                `Failed to create form for folder ${item.name}:`,
+                createErr,
+              );
+            }
+          }
         }
-      } catch (error: unknown) {
-        console.error(`Error syncing document ${item.name}:`, error);
-        throw error;
+      } catch (err) {
+        console.error(
+          'Error while attempting to create form from folder name:',
+          err,
+        );
       }
-      // Documents don't have children, so return early
-      return;
+
+      // Upsert files contained directly in this folder (e.g., PDFs)
+      if (Array.isArray(item.files) && item.files.length > 0) {
+        await Promise.all(
+          item.files.map(async (file) => {
+            // locally type the file to avoid unsafe `any` access
+            const f = file as {
+              id?: string;
+              name?: string;
+              mimeType?: string;
+              webContentLink?: string;
+            };
+
+            try {
+              if (!f.id || !f.name) return;
+
+              if (f.mimeType === 'application/pdf') {
+                await this.prisma.document.upsert({
+                  where: { driveId: f.id },
+                  update: {
+                    title: f.name,
+                    url: (f.webContentLink as string) || undefined,
+                    sectionId: section.id,
+                  },
+                  create: {
+                    driveId: f.id,
+                    title: f.name,
+                    url:
+                      (f.webContentLink as string) ||
+                      `https://drive.google.com/file/d/${f.id}/view`,
+                    sectionId: section.id,
+                  },
+                });
+              }
+            } catch (error: unknown) {
+              console.error(`Error syncing document ${f.name}:`, error);
+              throw error;
+            }
+          }),
+        );
+      }
+
+      // Recurse into child directories
+      if (Array.isArray(item.directories) && item.directories.length > 0) {
+        await Promise.all(
+          item.directories.map((child) =>
+            this.syncDirectoryTree(child, section.id),
+          ),
+        );
+      }
+    } catch (error: unknown) {
+      console.error(`Error syncing folder ${item.name}:`, error);
+      throw error;
     }
-    // Ignore other file types (not folders or PDFs)
   }
 }

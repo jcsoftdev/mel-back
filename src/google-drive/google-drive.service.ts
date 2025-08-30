@@ -99,50 +99,92 @@ export class GoogleDriveService {
   }
 
   private async buildTree(
-    files: drive_v3.Schema$File[],
+    nodes: drive_v3.Schema$File[],
     parentId: string,
   ): Promise<GoogleDriveDirectoryDto> {
-    type TreeNode = drive_v3.Schema$File & { children?: TreeNode[] };
+    let root = nodes.find((file) => file.id === parentId);
+    if (!root) {
+      root = await this.getFolderById(parentId);
+    }
 
-    const map = new Map<string, TreeNode>(
-      files.map((file) => [file.id!, file]),
-    );
+    const children = nodes.filter((file) => {
+      return (
+        file.parents && file.parents.includes(parentId) && file.id !== parentId
+      );
+    });
 
-    const root = await this.getFolderById(parentId);
+    const childDirectories: GoogleDriveDirectoryDto[] = [];
+    const childFiles: drive_v3.Schema$File[] = [];
 
-    const buildTreeRecursively = (
-      parent: TreeNode,
-    ): GoogleDriveDirectoryDto => {
-      console.log({ parent });
-      const children = map.values();
-      const data: GoogleDriveDirectoryDto[] = [];
-      for (const child of children) {
-        console.log({ child, parent });
-        if (child.parents?.includes(parent.id!)) {
-          if (child.mimeType === 'application/vnd.google-apps.folder') {
-            const childNode = buildTreeRecursively(child);
-            data.push(childNode);
-          } else {
-            data.push({
-              id: child.id!,
-              name: child.name!,
-              mimeType: child.mimeType!,
-              downloadUrl:
-                child.webContentLink! ??
-                `https://drive.google.com/uc?id=${child.id}`,
-            });
-          }
-          map.delete(child.id!);
-        }
+    for (const child of children) {
+      if (child.mimeType === 'application/vnd.google-apps.folder') {
+        const childTree = await this.buildTree(nodes, child.id!);
+        childDirectories.push(childTree);
+      } else {
+        childFiles.push(child);
       }
-      return {
-        id: parent.id!,
-        name: parent.name!,
-        mimeType: parent.mimeType!,
-        children: data,
-      };
+    }
+
+    return {
+      id: root.id!,
+      name: root.name!,
+      directories: childDirectories,
+      files: childFiles,
+    };
+  }
+
+  async createFolder(
+    name: string,
+    parentId?: string | null,
+  ): Promise<drive_v3.Schema$File> {
+    const fileMetadata: drive_v3.Schema$File = {
+      name,
+      mimeType: 'application/vnd.google-apps.folder',
     };
 
-    return buildTreeRecursively(root);
+    if (parentId) {
+      fileMetadata.parents = [parentId];
+    }
+
+    const response = await this.driveClient.files.create({
+      requestBody: fileMetadata,
+      fields: 'id, name',
+    });
+
+    return response.data;
+  }
+
+  async deleteFile(fileId: string): Promise<void> {
+    await this.driveClient.files.delete({
+      fileId,
+    });
+  }
+
+  async uploadFile(
+    fileName: string,
+    mimeType: string,
+    fileBuffer: Buffer,
+    parentId?: string,
+  ): Promise<drive_v3.Schema$File> {
+    const fileMetadata: drive_v3.Schema$File = {
+      name: fileName,
+    };
+
+    if (parentId) {
+      fileMetadata.parents = [parentId];
+    }
+
+    const media = {
+      mimeType,
+      body: Readable.from(fileBuffer),
+    };
+
+    const response = await this.driveClient.files.create({
+      requestBody: fileMetadata,
+      media,
+      fields: 'id, name, webViewLink',
+    });
+
+    return response.data;
   }
 }

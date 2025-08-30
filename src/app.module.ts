@@ -10,6 +10,7 @@ import { UsersModule } from './users/users.module';
 import { SectionsModule } from './sections/sections.module';
 import { DocumentsModule } from './documents/documents.module';
 import { AuthModule } from './auth/auth.module';
+import { FormsModule } from './forms/forms.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { AuthModule } from './auth/auth.module';
     SectionsModule,
     DocumentsModule,
     AuthModule,
+    FormsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
