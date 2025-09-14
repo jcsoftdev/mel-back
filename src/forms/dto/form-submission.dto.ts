@@ -1,49 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsArray,
-  ValidateNested,
-  IsNotEmpty,
-} from 'class-validator';
-import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
-export class SubmitFormFieldDto {
-  @ApiProperty({
-    description: 'Form field identifier',
-    example: 'field123',
-  })
-  @IsString({ message: 'Field ID must be a string' })
-  @IsNotEmpty({ message: 'Field ID is required' })
-  fieldId: string;
-
-  @ApiPropertyOptional({
-    description: 'Field value submitted by user',
-    example: 'John Doe',
-  })
-  @IsOptional()
-  @IsString({ message: 'Value must be a string' })
-  value?: string;
-}
-
-export class SubmitFormDto {
-  @ApiProperty({
-    description: 'Form identifier',
-    example: 'clp123abc456def789',
-  })
-  @IsString({ message: 'Form ID must be a string' })
-  @IsNotEmpty({ message: 'Form ID is required' })
-  formId: string;
-
-  @ApiProperty({
-    description: 'Form field submissions',
-    type: [SubmitFormFieldDto],
-  })
-  @IsArray({ message: 'Fields must be an array' })
-  @ValidateNested({ each: true })
-  @Type(() => SubmitFormFieldDto)
-  fields: SubmitFormFieldDto[];
-}
 
 export class FormSubmissionFieldResponseDto {
   @ApiProperty({
@@ -121,6 +76,12 @@ export class FileMetadataResponseDto {
     example: '2024-01-15T14:30:00.000Z',
   })
   uploadedAt: Date;
+
+  @ApiPropertyOptional({
+    description: 'Base64 encoded file content',
+    example: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...',
+  })
+  base64Content?: string;
 }
 
 export class FormSubmissionResponseDto {

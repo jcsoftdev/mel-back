@@ -16,6 +16,7 @@ model User {
   password  String
   createdAt DateTime   @default(now())
   roles     UserRole[]
+  submissions FormSubmission[]
 }
 
 model Role {
@@ -134,14 +135,17 @@ model FormField {
 model FormSubmission {
   id          String                @id @default(uuid())
   formId      String
+  userId      String?
   submittedAt DateTime              @default(now())
   ipAddress   String?
   userAgent   String?
   form        Form                  @relation(fields: [formId], references: [id], onDelete: Cascade)
   fields      FormSubmissionField[]
   files       FileMetadata[]
+  user        User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([formId])
+  @@index([userId])
   @@index([submittedAt])
 }
 

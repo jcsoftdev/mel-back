@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { GoogleDriveService } from '../../google-drive/google-drive.service';
 import { CreateFormDto } from '../dto/create-form.dto';
 import { UpdateFormDto } from '../dto/update-form.dto';
 
 @Injectable()
 export class FormsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly googleDriveService: GoogleDriveService,
+  ) {}
 
   async create(createFormDto: CreateFormDto) {
     return this.prisma.$transaction(async (tx) => {
@@ -70,6 +74,9 @@ export class FormsService {
         },
         submissions: {
           orderBy: { submittedAt: 'desc' },
+          include: {
+            user: true,
+          },
         },
       },
     });
@@ -150,9 +157,10 @@ export class FormsService {
 
   async getFormSubmissions(id: string) {
     await this.findOne(id);
-    return this.prisma.formSubmission.findMany({
+    const submissions = await this.prisma.formSubmission.findMany({
       where: { formId: id },
       include: {
+        user: true,
         files: true,
         fields: {
           include: {
@@ -162,5 +170,21 @@ export class FormsService {
       },
       orderBy: { submittedAt: 'desc' },
     });
+
+    const submissionsWithBase64 = await Promise.all(
+      submissions.map(async (submission) => {
+        const filesWithBase64 = await Promise.all(
+          submission.files.map(async (file) => {
+            const base64 = await this.googleDriveService.getFileAsBase64(
+              file.driveId,
+            );
+            return { ...file, base64 };
+          }),
+        );
+        return { ...submission, files: filesWithBase64 };
+      }),
+    );
+
+    return submissionsWithBase64;
   }
 }

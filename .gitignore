@@ -54,3 +54,7 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+
+google-drive-credentials.json
+jcsoftdev-9aff9-56c0a3a5e033.json

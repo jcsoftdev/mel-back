@@ -33,7 +33,11 @@ export class FormValidationService {
     value: string | null,
     file?: FileUpload,
   ): void {
-    if (field.isRequired && this.isEmpty(value, field.fieldType, file)) {
+    if (
+      field.isRequired &&
+      this.isEmpty(value, field.fieldType, file) &&
+      field.fieldType !== FormFieldType.INPUT_FILE
+    ) {
       throw new BadRequestException(`${field.label} is required`);
     }
 
@@ -59,6 +63,7 @@ export class FormValidationService {
     fieldType: FormFieldType,
     file?: FileUpload,
   ): boolean {
+    console.log({ value, fieldType, file });
     if (fieldType === FormFieldType.INPUT_FILE) {
       return !file;
     }
@@ -160,7 +165,7 @@ export class FormValidationService {
       const fieldFiles =
         files?.filter((file) => file.fieldname === field.id) || [];
       const file = fieldFiles[0];
-
+      console.log({ field, value, file, fieldFiles, files });
       this.validateFieldValue(field, value, file);
     }
   }

@@ -12,18 +12,28 @@ import {
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
+
+type UploadedFile = {
+  fieldname: string;
+  originalname: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
+};
+
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiConsumes,
-  ApiBody,
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { FormSubmissionService } from './services/form-submission.service';
 import { SubmitFormDto } from './dto/submit-form.dto';
 import { FormSubmissionResponseDto } from './dto/form-submission.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+// using Express.Multer.File[] for uploaded files (multer types are provided by installed packages)
 
 @ApiTags('Form Submissions')
 @Controller('form-submissions')
@@ -33,57 +43,22 @@ export class FormSubmissionController {
   @Post()
   @ApiOperation({ summary: 'Submit a form with optional file uploads' })
   @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    description: 'Form submission data with optional files',
-    schema: {
-      type: 'object',
-      properties: {
-        formId: {
-          type: 'string',
-          example: 'clp123abc456def789',
-          description: 'Form identifier',
-        },
-        fields: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              fieldId: {
-                type: 'string',
-                example: 'field123',
-                description: 'Form field identifier',
-              },
-              value: {
-                type: 'string',
-                example: 'John Doe',
-                description: 'Field value',
-              },
-            },
-          },
-        },
-        files: {
-          type: 'array',
-          items: {
-            type: 'string',
-            format: 'binary',
-          },
-          description: 'Optional file uploads (max 10 files)',
-        },
-      },
-    },
-  })
   @ApiResponse({
     status: 201,
     description: 'Form submitted successfully',
     type: FormSubmissionResponseDto,
   })
+  @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 400, description: 'Invalid form data' })
   @ApiResponse({ status: 404, description: 'Form not found' })
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FilesInterceptor('files', 10))
   async submitForm(
-    @Body() submitFormDto: SubmitFormDto,
-    @UploadedFiles() files: any[],
+    @Body()
+    submitFormDto: SubmitFormDto,
+    @UploadedFiles() files: UploadedFile[],
     @Req() request: Request,
+    @CurrentUser() user?: { id: string },
   ) {
     const ipAddress = request.ip || request.connection.remoteAddress;
     const userAgent = request.get('User-Agent');
@@ -98,11 +73,14 @@ export class FormSubmissionController {
       submitFormDto.formId,
       submissionData,
       files,
+      user?.id,
     );
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a specific form submission' })
+  @Get('form/:formId/my')
+  @ApiOperation({
+    summary: "Get the authenticated user's latest submission for a form",
+  })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({
     status: 200,
@@ -112,8 +90,19 @@ export class FormSubmissionController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Submission not found' })
   @UseGuards(JwtAuthGuard)
-  getSubmission(@Param('id') id: string) {
-    return this.formSubmissionService.getSubmission(id);
+  getMySubmission(
+    @Param('formId') formId: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.formSubmissionService.getMySubmission(formId, user.id);
+  }
+
+  @Get('form/:formId')
+  @ApiOperation({ summary: 'Get all submissions for a form' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  getFormSubmissions(@Param('formId') formId: string) {
+    return this.formSubmissionService.getFormSubmissions(formId);
   }
 
   @Delete(':id')

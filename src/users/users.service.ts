@@ -273,15 +273,24 @@ export class UsersService {
     console.log({ item, parentSectionId });
 
     try {
+      const name = item.name
+        // elimina el prefijo "form_" si lo tiene (case-insensitive)
+        .replace(/^form_/i, '')
+        // reemplaza guiones y underscores por espacios
+        .replace(/[_-]+/g, ' ')
+        // quita espacios al inicio y fin
+        .trim();
+
+      console.log({ name });
       const section = await this.prisma.section.upsert({
         where: { driveId: item.id },
         update: {
-          name: item.name,
+          name,
           parentId: parentSectionId || undefined,
         },
         create: {
           driveId: item.id,
-          name: item.name,
+          name,
           parentId: parentSectionId || undefined,
         },
         select: { id: true, name: true },
@@ -308,7 +317,7 @@ export class UsersService {
           if (!existingForm) {
             const createFormDto: CreateFormDto = {
               title,
-              description: `Form created from Drive folder ${item.name}`,
+              description: `Formulario creado desde carpeta de drive: ${item.name}`,
               driveId: item.id,
               fields: [],
               isActive: false,

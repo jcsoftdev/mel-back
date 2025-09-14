@@ -31,6 +31,15 @@ export class GoogleDriveService {
     return response;
   }
 
+  async getFileAsBase64(fileId: string): Promise<string> {
+    const response = await this.driveClient.files.get(
+      { fileId, alt: 'media' },
+      { responseType: 'arraybuffer' },
+    );
+    const buffer = Buffer.from(response.data as ArrayBuffer);
+    return buffer.toString('base64');
+  }
+
   async getDirectoryTree(folderId: string) {
     const files = await this.getAllFilesRecursive(folderId);
     const tree = this.buildTree(files, folderId);
@@ -166,6 +175,7 @@ export class GoogleDriveService {
     fileBuffer: Buffer,
     parentId?: string,
   ): Promise<drive_v3.Schema$File> {
+    console.log({ fileName, mimeType, fileBuffer, parentId });
     const fileMetadata: drive_v3.Schema$File = {
       name: fileName,
     };
@@ -180,10 +190,13 @@ export class GoogleDriveService {
     };
 
     const response = await this.driveClient.files.create({
+      supportsAllDrives: true,
       requestBody: fileMetadata,
       media,
-      fields: 'id, name, webViewLink',
+      fields: 'id, name, webViewLink, parents',
     });
+
+    console.log(JSON.stringify(response.data, null, 2));
 
     return response.data;
   }

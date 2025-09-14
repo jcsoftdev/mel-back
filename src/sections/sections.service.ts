@@ -6,23 +6,10 @@ import {
 import { CreateSectionDto } from './dto/create-section.dto';
 import { UpdateSectionDto } from './dto/update-section.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { Section } from '@prisma/client';
-import { SectionTree } from './types/section.types';
+import { Form, Section } from '@prisma/client';
+import { SectionTree, SectionWithRelations } from './types/section.types';
 import { RoleAccessService } from '../common/services/role-access.service';
-
-interface SectionWithRelations extends Section {
-  parent?: Section | null;
-  children?: SectionWithRelations[];
-  documents?: {
-    id: string;
-    title: string;
-    url: string;
-    driveId?: string | null;
-    sectionId: string;
-    createdAt: Date;
-  }[];
-  roleGrants?: any[];
-}
+import { forms } from 'googleapis/build/src/apis/forms';
 
 @Injectable()
 export class SectionsService {
@@ -322,13 +309,16 @@ export class SectionsService {
       },
     });
 
-    return this.buildSectionTree(sections)[0].children;
+    const forms = await this.prisma.form.findMany();
+
+    return this.buildSectionTree(sections, forms)[0].children;
   }
 
   async getSectionTreeByUserRoles(
     userRoles: string[],
     rootId?: string,
   ): Promise<SectionTree[]> {
+    console.log({ userRoles });
     const { allSectionIds, directSectionIds, documentIds } =
       await this.roleAccessService.getUserRoleAccessData(userRoles);
 
@@ -345,7 +335,7 @@ export class SectionsService {
       ...new Set([...allSectionIds, ...descendantSectionIds]),
     ];
 
-    const [allSections, allDocuments] = await Promise.all([
+    const [allSections, allDocuments, allForms] = await Promise.all([
       this.prisma.section.findMany({
         where: {
           id: {
@@ -371,48 +361,59 @@ export class SectionsService {
           createdAt: true,
         },
       }),
+      this.prisma.form.findMany(),
     ]);
 
-    const sectionsWithDocuments = allSections.map((section) => {
-      const hasDirectSectionAccess = sectionsWithDirectAccess.has(section.id);
-      const isDescendantOfDirectAccess = this.isDescendantOfDirectAccess(
-        section,
-        directSectionIds,
-        allSections,
-      );
+    const sectionsWithDocuments = allSections.map(
+      (section): SectionWithRelations => {
+        const hasDirectSectionAccess = sectionsWithDirectAccess.has(section.id);
+        const isDescendantOfDirectAccess = this.isDescendantOfDirectAccess(
+          section,
+          directSectionIds,
+          allSections,
+        );
 
-      let sectionDocuments: {
-        id: string;
-        title: string;
-        url: string;
-        driveId?: string | null;
-        sectionId: string;
-        createdAt: Date;
-      }[];
-      if (hasDirectSectionAccess) {
-        // If user has direct access to section, show all documents
-        sectionDocuments = allDocuments.filter(
-          (doc) => doc.sectionId === section.id,
-        );
-      } else if (isDescendantOfDirectAccess) {
-        // If section is descendant of direct access, show all documents
-        sectionDocuments = allDocuments.filter(
-          (doc) => doc.sectionId === section.id,
-        );
-      } else {
-        // For other sections, only show documents with direct access
-        sectionDocuments = allDocuments.filter(
-          (doc) =>
-            doc.sectionId === section.id &&
-            documentsWithDirectAccess.has(doc.id),
-        );
-      }
+        let sectionDocuments: {
+          id: string;
+          title: string;
+          url: string;
+          driveId?: string | null;
+          sectionId: string;
+          createdAt: Date;
+        }[];
+        if (hasDirectSectionAccess) {
+          // If user has direct access to section, show all documents
+          sectionDocuments = allDocuments.filter(
+            (doc) => doc.sectionId === section.id,
+          );
+        } else if (isDescendantOfDirectAccess) {
+          // If section is descendant of direct access, show all documents
+          sectionDocuments = allDocuments.filter(
+            (doc) => doc.sectionId === section.id,
+          );
+        } else {
+          // For other sections, only show documents with direct access
+          sectionDocuments = allDocuments.filter(
+            (doc) =>
+              doc.sectionId === section.id &&
+              documentsWithDirectAccess.has(doc.id),
+          );
+        }
 
-      return {
-        ...section,
-        documents: sectionDocuments,
-      } as SectionWithRelations;
-    });
+        const forms = allForms
+          .filter((form) => form.driveId === section.driveId && form.isActive)
+          .map((form) => ({
+            id: form.id,
+            driveId: form.driveId as string,
+          }));
+
+        return {
+          ...section,
+          documents: sectionDocuments,
+          forms: forms,
+        };
+      },
+    );
 
     const sectionsWithAccessibleChildren = new Set<string>();
 
@@ -438,11 +439,13 @@ export class SectionsService {
       const hasAccessibleChildren = sectionsWithAccessibleChildren.has(
         section.id,
       );
+      const hasForms = section.forms && section.forms.length > 0;
 
       return (
         hasDirectSectionAccess ||
         hasDocumentsWithAccess ||
-        hasAccessibleChildren
+        hasAccessibleChildren ||
+        hasForms
       );
     });
 
@@ -501,24 +504,39 @@ export class SectionsService {
     return false;
   }
 
-  private buildSectionTree(sections: SectionWithRelations[]): SectionTree[] {
-    const returnSections = sections.map((section) => ({
-      id: section.id,
-      name: section.name,
-      parentId: section.parentId,
-      documentCount: section.documents?.length || 0,
-      documents:
-        section.documents?.map((doc) => ({
-          id: doc.id,
-          title: doc.title,
-          url: doc.url,
-          driveId: doc.driveId,
-          sectionId: doc.sectionId,
-          createdAt: doc.createdAt,
-        })) || [],
-      children: section.children ? this.buildSectionTree(section.children) : [],
-      driveId: section.driveId,
-    }));
+  private buildSectionTree(
+    sections: SectionWithRelations[],
+    allForms: Form[],
+  ): SectionTree[] {
+    const returnSections = sections.map((section): SectionTree => {
+      const forms = allForms
+        .filter((form) => form.driveId === section.driveId && form.isActive)
+        .map((form) => ({
+          id: form.id,
+          driveId: form.driveId as string,
+        }));
+      return {
+        id: section.id,
+        name: section.name,
+        parentId: section.parentId,
+        documentCount: section.documents?.length || 0,
+        documents:
+          section.documents?.map((doc) => ({
+            id: doc.id,
+            title: doc.title,
+            url: doc.url,
+            driveId: doc.driveId,
+            sectionId: doc.sectionId,
+            createdAt: doc.createdAt,
+          })) || [],
+        children: section.children
+          ? this.buildSectionTree(section.children, allForms)
+          : [],
+        driveId: section.driveId,
+        forms,
+        formsCount: forms.length,
+      };
+    });
     return returnSections;
   }
 
@@ -530,7 +548,31 @@ export class SectionsService {
       const children = allSections.filter(
         (section) => section.parentId === parentId,
       );
-      return children.map((section) => ({
+      return children.map((section) => {
+        return {
+          id: section.id,
+          name: section.name,
+          parentId: section.parentId,
+          documentCount: section.documents?.length || 0,
+          documents:
+            section.documents?.map((doc) => ({
+              id: doc.id,
+              title: doc.title,
+              url: doc.url,
+              driveId: doc.driveId,
+              sectionId: doc.sectionId,
+              createdAt: doc.createdAt,
+            })) || [],
+          children: buildChildren(section.id),
+          forms: section.forms || [],
+          formsCount: section.forms?.length || 0,
+          driveId: section.driveId,
+        };
+      });
+    };
+
+    return rootSections.map((section) => {
+      return {
         id: section.id,
         name: section.name,
         parentId: section.parentId,
@@ -545,24 +587,10 @@ export class SectionsService {
             createdAt: doc.createdAt,
           })) || [],
         children: buildChildren(section.id),
-      }));
-    };
-
-    return rootSections.map((section) => ({
-      id: section.id,
-      name: section.name,
-      parentId: section.parentId,
-      documentCount: section.documents?.length || 0,
-      documents:
-        section.documents?.map((doc) => ({
-          id: doc.id,
-          title: doc.title,
-          url: doc.url,
-          driveId: doc.driveId,
-          sectionId: doc.sectionId,
-          createdAt: doc.createdAt,
-        })) || [],
-      children: buildChildren(section.id),
-    }));
+        forms: section.forms || [],
+        driveId: section.driveId,
+        formsCount: forms.length,
+      };
+    });
   }
 }

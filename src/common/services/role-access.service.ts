@@ -13,7 +13,7 @@ interface CacheEntry {
 @Injectable()
 export class RoleAccessService {
   private cache = new Map<string, CacheEntry>();
-  private readonly CACHE_TTL = 5 * 60 * 1000;
+  private readonly CACHE_TTL = 5 * 60 * 1000 * 0; // 5 minutes
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -217,6 +217,7 @@ export class RoleAccessService {
     const now = Date.now();
 
     if (cached && now - cached.timestamp < this.CACHE_TTL) {
+      console.log('Cache hit');
       return cached.data;
     }
 
