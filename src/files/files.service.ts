@@ -9,11 +9,15 @@ export class FilesService {
   }
 
   async downloadFile(fileId: string) {
+    // Obtener metadatos del archivo para el nombre y tipo MIME
+    const fileMetadata = await this.driveClient.getFolderById(fileId);
+
+    // Obtener el stream del archivo
     const response = await this.driveClient.getMediaStream(fileId);
 
     return {
-      name: `archivo-${fileId}.pdf`,
-      mimeType: response.headers?.['content-type'] as string,
+      name: fileMetadata.name || `archivo-${fileId}`,
+      mimeType: fileMetadata.mimeType || 'application/octet-stream',
       data: response.data,
       stream: response.data,
     };

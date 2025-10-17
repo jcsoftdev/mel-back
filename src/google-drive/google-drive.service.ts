@@ -10,12 +10,11 @@ export class GoogleDriveService {
   private readonly driveClient: drive_v3.Drive;
 
   constructor(private readonly configService: ConfigService) {
-    const auth = new google.auth.JWT(
-      configService.googleDrive.clientId,
-      undefined,
-      configService.googleDrive.privateKey?.replace(/\\n/g, '\n'),
-      ['https://www.googleapis.com/auth/drive'],
-    );
+    const auth = new google.auth.JWT({
+      email: configService.googleDrive.clientId,
+      key: configService.googleDrive.privateKey?.replace(/\\n/g, '\n'),
+      scopes: ['https://www.googleapis.com/auth/drive'],
+    });
 
     this.driveClient = google.drive({
       version: 'v3',

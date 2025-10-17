@@ -32,7 +32,7 @@ export class FilesController {
       await this.filesService.downloadFile(fileId);
 
     res.setHeader('Content-Disposition', `inline; filename="${name}"`);
-    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Type', mimeType || 'application/octet-stream');
 
     stream.pipe(res);
   }
