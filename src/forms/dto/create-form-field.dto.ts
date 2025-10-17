@@ -65,8 +65,14 @@ export class CreateFormFieldDto {
   options?: any;
 
   @ApiPropertyOptional({
-    description: 'Field validation rules',
-    example: { minLength: 2, maxLength: 50 },
+    description:
+      'Field validation rules. For date fields, use minDate and maxDate in YYYY-MM-DD format',
+    example: {
+      minLength: 2,
+      maxLength: 50,
+      minDate: '2024-01-01',
+      maxDate: '2024-12-31',
+    },
   })
   @IsOptional()
   @IsObject({ message: 'Validation must be an object' })

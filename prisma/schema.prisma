@@ -184,4 +184,5 @@ enum FormFieldType {
   SELECT
   INPUT_TEXT
   INPUT_FILE
+  INPUT_DATE
 }

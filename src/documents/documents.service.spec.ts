@@ -1,12 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DocumentsService } from './documents.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RoleAccessService } from '../common/services/role-access.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { NotFoundException } from '@nestjs/common';
+import {
+  createMockPrismaService,
+  createMockRoleAccessService,
+} from '../common/test/test-utils';
 
 describe('DocumentsService', () => {
   let service: DocumentsService;
+  const mockPrismaService = createMockPrismaService();
+  const mockRoleAccessService = createMockRoleAccessService();
 
   const mockDocument = {
     id: '550e8400-e29b-41d4-a716-446655440000',
@@ -20,16 +27,6 @@ describe('DocumentsService', () => {
     },
   };
 
-  const mockPrismaService = {
-    document: {
-      create: jest.fn(),
-      findMany: jest.fn(),
-      findUnique: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
-    },
-  };
-
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -37,6 +34,10 @@ describe('DocumentsService', () => {
         {
           provide: PrismaService,
           useValue: mockPrismaService,
+        },
+        {
+          provide: RoleAccessService,
+          useValue: mockRoleAccessService,
         },
       ],
     }).compile();

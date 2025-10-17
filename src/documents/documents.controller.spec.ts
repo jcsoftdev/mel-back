@@ -72,9 +72,12 @@ describe('DocumentsController', () => {
   describe('findAll', () => {
     it('should return all documents when no sectionId provided', async () => {
       const documents = [mockDocument];
+      const mockUser = {
+        roles: ['admin'],
+      };
       mockDocumentsService.findAll.mockResolvedValue(documents);
 
-      const result = await controller.findAll();
+      const result = await controller.findAll(mockUser);
 
       expect(mockDocumentsService.findAll).toHaveBeenCalled();
       expect(result).toEqual(documents);
@@ -83,9 +86,12 @@ describe('DocumentsController', () => {
     it('should return documents by section when sectionId provided', async () => {
       const documents = [mockDocument];
       const sectionId = '550e8400-e29b-41d4-a716-446655440001';
+      const mockUser = {
+        roles: ['admin'],
+      };
       mockDocumentsService.findBySection.mockResolvedValue(documents);
 
-      const result = await controller.findAll(sectionId);
+      const result = await controller.findAll(mockUser, sectionId);
 
       expect(mockDocumentsService.findBySection).toHaveBeenCalledWith(
         sectionId,

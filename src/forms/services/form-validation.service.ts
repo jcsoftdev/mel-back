@@ -8,6 +8,8 @@ interface ValidationRule {
   pattern?: string;
   maxSize?: number;
   allowedTypes?: string[];
+  minDate?: string;
+  maxDate?: string;
 }
 
 interface FileUpload {
@@ -54,6 +56,9 @@ export class FormValidationService {
         break;
       case FormFieldType.INPUT_FILE:
         this.validateFileInput(field, file);
+        break;
+      case FormFieldType.INPUT_DATE:
+        this.validateDateInput(field, value as string);
         break;
     }
   }
@@ -118,6 +123,45 @@ export class FormValidationService {
     }
   }
 
+  private validateDateInput(
+    field: FormFieldWithValidation,
+    value: string,
+  ): void {
+    // Validate that the value is a valid date
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/; // YYYY-MM-DD format
+    if (!dateRegex.test(value)) {
+      throw new BadRequestException(
+        `${field.label} must be in YYYY-MM-DD format`,
+      );
+    }
+
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException(`${field.label} is not a valid date`);
+    }
+
+    const validation = field.validation;
+    if (!validation) return;
+
+    if (validation.minDate) {
+      const minDate = new Date(validation.minDate);
+      if (date < minDate) {
+        throw new BadRequestException(
+          `${field.label} cannot be before ${validation.minDate}`,
+        );
+      }
+    }
+
+    if (validation.maxDate) {
+      const maxDate = new Date(validation.maxDate);
+      if (date > maxDate) {
+        throw new BadRequestException(
+          `${field.label} cannot be after ${validation.maxDate}`,
+        );
+      }
+    }
+  }
+
   private validateFileInput(
     field: FormFieldWithValidation,
     file?: FileUpload,
@@ -178,6 +222,7 @@ export class FormValidationService {
     switch (fieldType) {
       case FormFieldType.INPUT_TEXT:
       case FormFieldType.SELECT:
+      case FormFieldType.INPUT_DATE:
         return value.trim();
       case FormFieldType.INPUT_FILE:
         return null;
