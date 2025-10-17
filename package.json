@@ -89,7 +89,11 @@
         {
           "isolatedModules": true,
           "tsconfig": {
-            "esModuleInterop": true
+            "baseUrl": "./",
+            "esModuleInterop": true,
+            "paths": {
+              "src/*": ["<rootDir>/*"]
+            }
           }
         }
       ]

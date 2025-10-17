@@ -77,3 +77,30 @@ export class SubmitFormDto {
   @IsString({ message: 'User agent must be a string' })
   userAgent?: string;
 }
+
+export class UpdateFormSubmissionDto {
+  @ApiProperty({
+    description: 'Form field submissions',
+    type: [SubmitFormFieldDto],
+    example: [
+      { fieldId: '09ae449b-3055-4546-bd6d-a74f3839bc76', value: 'John Doe' },
+    ],
+  })
+  @IsArray({ message: 'Fields must be an array' })
+  @ValidateNested({ each: true })
+  @Transform(({ value }) => {
+    // If fields are sent as a JSON string (multipart/form-data), parse them.
+    if (typeof value === 'string') {
+      try {
+        const parsed: unknown = JSON.parse(value);
+        return parsed as SubmitFormFieldDto[];
+      } catch {
+        // leave as-is so validation will catch it and produce a helpful error
+        return value as unknown;
+      }
+    }
+    return value as unknown;
+  })
+  @Type(() => SubmitFormFieldDto)
+  fields: SubmitFormFieldDto[];
+}

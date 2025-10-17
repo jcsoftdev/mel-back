@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Put,
   Delete,
   Body,
   Param,
@@ -9,6 +10,7 @@ import {
   UploadedFiles,
   Req,
   UseGuards,
+  UsePipes,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
@@ -29,10 +31,11 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { FormSubmissionService } from './services/form-submission.service';
-import { SubmitFormDto } from './dto/submit-form.dto';
+import { SubmitFormDto, UpdateFormSubmissionDto } from './dto/submit-form.dto';
 import { FormSubmissionResponseDto } from './dto/form-submission.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { ParseJsonFieldsPipe } from './pipes/parse-json-fields.pipe';
 // using Express.Multer.File[] for uploaded files (multer types are provided by installed packages)
 
 @ApiTags('Form Submissions')
@@ -113,9 +116,36 @@ export class FormSubmissionController {
     description: 'Form submission deleted successfully',
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 404, description: 'Submission not found' })
+  @ApiResponse({ status: 404, description: 'Form submission not found' })
   @UseGuards(JwtAuthGuard)
   deleteSubmission(@Param('id') id: string) {
     return this.formSubmissionService.deleteSubmission(id);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update a form submission' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({
+    status: 200,
+    description: 'Form submission updated successfully',
+    type: FormSubmissionResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid form data' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Form submission not found' })
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FilesInterceptor('files', 10))
+  @UsePipes(ParseJsonFieldsPipe)
+  async updateSubmission(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateFormSubmissionDto,
+    @UploadedFiles() files: UploadedFile[],
+  ) {
+    return this.formSubmissionService.updateSubmission(
+      id,
+      updateDto.fields,
+      files,
+    );
   }
 }

@@ -348,4 +348,190 @@ export class FormSubmissionService {
       });
     });
   }
+
+  async updateSubmission(
+    submissionId: string,
+    updateFields: SubmitFormFieldDto[],
+    files?: Array<{
+      fieldname: string;
+      originalname: string;
+      mimetype: string;
+      size: number;
+      buffer: Buffer;
+    }>,
+  ): Promise<FormSubmissionResponseDto> {
+    // Get the existing submission with its form data
+    const submission = await this.prisma.formSubmission.findUnique({
+      where: { id: submissionId },
+      include: {
+        form: {
+          include: {
+            fields: {
+              orderBy: { order: 'asc' },
+            },
+          },
+        },
+        fields: true,
+        files: true,
+      },
+    });
+
+    if (!submission) {
+      throw new NotFoundException('Form submission not found');
+    }
+
+    // Validate the updated fields
+    const formFields = submission.form.fields.map((field) => ({
+      id: field.id,
+      fieldType: field.fieldType,
+      label: field.label,
+      isRequired: field.isRequired,
+      validation: (field.validation as Record<string, any>) || {},
+      options: field.options as string[] | undefined,
+    }));
+
+    // Validate each submitted field
+    const submissionData: Record<string, string> = {};
+    for (const submittedField of updateFields) {
+      const formField = formFields.find((f) => f.id === submittedField.fieldId);
+      if (!formField) {
+        throw new BadRequestException(
+          `Field ${submittedField.fieldId} not found in form`,
+        );
+      }
+
+      const file = files?.find((f) => f.fieldname === submittedField.fieldId);
+      this.formValidationService.validateFieldValue(
+        formField,
+        submittedField.value || null,
+        file,
+      );
+
+      if (submittedField.value) {
+        submissionData[submittedField.fieldId] = submittedField.value;
+      }
+    }
+
+    // Update submission in transaction
+    return this.prisma.$transaction(async (tx) => {
+      // Update the submission timestamp
+      await tx.formSubmission.update({
+        where: { id: submissionId },
+        data: {
+          submittedAt: new Date(),
+        },
+      });
+
+      // Delete old field submissions
+      await tx.formSubmissionField.deleteMany({
+        where: { submissionId },
+      });
+
+      // Create new field submissions
+      await Promise.all(
+        updateFields.map((field) =>
+          tx.formSubmissionField.create({
+            data: {
+              submissionId,
+              fieldId: field.fieldId,
+              value: field.value || null,
+            },
+          }),
+        ),
+      );
+
+      // Handle file updates if provided
+      if (files && files.length > 0) {
+        // Delete old files from Google Drive
+        for (const file of submission.files) {
+          try {
+            await this.googleDriveService.deleteFile(file.driveId);
+          } catch (error) {
+            console.error(
+              `Failed to delete file from Google Drive: ${file.driveId}`,
+              error,
+            );
+          }
+        }
+
+        // Delete old file records
+        await tx.fileMetadata.deleteMany({
+          where: { submissionId },
+        });
+
+        // Upload new files
+        for (const file of files) {
+          if (file.size > 0) {
+            const driveId = submission.form.driveId;
+            if (!driveId) {
+              throw new BadRequestException('Form drive ID is not configured');
+            }
+
+            const uploadedFile = await this.googleDriveService.uploadFile(
+              driveId,
+              file.originalname,
+              file.buffer,
+              file.mimetype,
+            );
+
+            await tx.fileMetadata.create({
+              data: {
+                submissionId,
+                fieldId: file.fieldname,
+                fileName: file.originalname,
+                originalName: file.originalname,
+                mimeType: file.mimetype,
+                size: file.size,
+                driveId: uploadedFile.id as string,
+                driveUrl: (uploadedFile.webViewLink ||
+                  uploadedFile.id) as string,
+              },
+            });
+          }
+        }
+      }
+
+      // Fetch and return updated submission
+      const updated = await tx.formSubmission.findUnique({
+        where: { id: submissionId },
+        include: {
+          fields: {
+            include: {
+              field: true,
+            },
+          },
+          files: true,
+        },
+      });
+
+      if (!updated) {
+        throw new NotFoundException('Form submission not found after update');
+      }
+
+      return {
+        id: updated.id,
+        formId: updated.formId,
+        submittedAt: updated.submittedAt,
+        fields: updated.fields.map((field) => ({
+          id: field.id,
+          fieldId: field.fieldId,
+          value: field.value || undefined,
+          field: {
+            id: field.field.id,
+            label: field.field.label,
+            fieldType: field.field.fieldType.toString(),
+          },
+        })),
+        files: updated.files.map((file) => ({
+          id: file.id,
+          fieldId: file.fieldId,
+          fileName: file.fileName,
+          fileSize: file.size,
+          mimeType: file.mimeType,
+          driveFileId: file.driveId,
+          uploadedAt: file.uploadedAt,
+        })),
+      };
+    });
+  }
 }

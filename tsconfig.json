@@ -19,7 +19,6 @@
     "noFallthroughCasesInSwitch": false,
     "moduleResolution": "nodenext",
     "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "ignoreDeprecations": "6.0"
+    "resolveJsonModule": true
   }
 }
