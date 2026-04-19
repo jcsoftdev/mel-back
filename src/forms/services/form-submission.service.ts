@@ -10,6 +10,24 @@ import { SubmitFormDto, SubmitFormFieldDto } from '../dto/submit-form.dto';
 import { FormSubmissionResponseDto } from '../dto/form-submission.dto';
 import { FormFieldType } from '@prisma/client';
 
+const EXT_MIME: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  pdf: 'application/pdf',
+};
+
+function resolveMimeType(
+  declared: string | undefined,
+  filename: string,
+): string {
+  if (declared && declared.includes('/')) return declared;
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  return EXT_MIME[ext] || 'application/octet-stream';
+}
+
 @Injectable()
 export class FormSubmissionService {
   constructor(
@@ -92,7 +110,8 @@ export class FormSubmissionService {
       fileUploads,
     );
 
-    return await this.prisma.$transaction(async (tx) => {
+    return await this.prisma.$transaction(
+      async (tx) => {
       const submission = await tx.formSubmission.create({
         data: {
           formId,
@@ -106,17 +125,18 @@ export class FormSubmissionService {
       for (const field of form.fields) {
         const fieldSubmission = fieldsArray.find((f) => f.fieldId === field.id);
         const fieldValue = fieldSubmission?.value;
-        // Look for a file with fieldname matching the field id or with fieldname in format 'fieldId_index'
+        // Frontend names files as either `<fieldId>` (legacy) or `photo_<fieldId>_<timestamp>.<ext>`
         const file = files?.find((f) => {
-          // Match exact fieldname or fieldname with format 'fieldId_index'
-          return f.originalname === field.id;
+          if (f.originalname === field.id) return true;
+          const match = f.originalname.match(/^photo_(.+)_\d+\.[a-z0-9]+$/i);
+          return match?.[1] === field.id;
         });
 
         if (field.fieldType === FormFieldType.INPUT_FILE && file) {
-          console.log(JSON.stringify(file, null, 2));
+          const mimeType = resolveMimeType(file.mimetype, file.originalname);
           const driveFile = await this.googleDriveService.uploadFile(
             file.originalname,
-            file.mimetype,
+            mimeType,
             file.buffer,
             form.driveId || undefined,
           );
@@ -127,7 +147,7 @@ export class FormSubmissionService {
               fieldId: field.id,
               originalName: file.originalname,
               fileName: driveFile.name || file.originalname,
-              mimeType: file.mimetype,
+              mimeType,
               size: file.size,
               driveId: driveFile.id!,
               driveUrl: driveFile.webViewLink || '',
@@ -158,7 +178,9 @@ export class FormSubmissionService {
       }
 
       return { id: submission.id };
-    });
+      },
+      { maxWait: 15000, timeout: 60000 },
+    );
   }
 
   async getFormSubmissions(
@@ -412,8 +434,10 @@ export class FormSubmissionService {
       }
     }
 
-    // Update submission in transaction
-    return this.prisma.$transaction(async (tx) => {
+    // Update submission in transaction.
+    // Drive uploads inside the transaction can take >5s (default); raise both maxWait and timeout.
+    return this.prisma.$transaction(
+      async (tx) => {
       // Update the submission timestamp
       await tx.formSubmission.update({
         where: { id: submissionId },
@@ -459,7 +483,9 @@ export class FormSubmissionService {
           where: { submissionId },
         });
 
-        // Upload new files
+        // Upload new files. Resolve fieldId from originalname: either raw `<fieldId>` (legacy)
+        // or `photo_<fieldId>_<timestamp>.<ext>` (current frontend).
+        const formFieldIds = new Set(submission.form.fields.map((f) => f.id));
         for (const file of files) {
           if (file.size > 0) {
             const driveId = submission.form.driveId;
@@ -467,20 +493,40 @@ export class FormSubmissionService {
               throw new BadRequestException('Form drive ID is not configured');
             }
 
+            let resolvedFieldId: string | null = null;
+            if (formFieldIds.has(file.originalname)) {
+              resolvedFieldId = file.originalname;
+            } else {
+              const match = /^photo_(.+)_\d+\.[a-z0-9]+$/i.exec(
+                file.originalname,
+              );
+              if (match && formFieldIds.has(match[1])) {
+                resolvedFieldId = match[1];
+              }
+            }
+
+            if (!resolvedFieldId) {
+              console.error(
+                `Cannot resolve fieldId for file ${file.originalname}, skipping`,
+              );
+              continue;
+            }
+
+            const mimeType = resolveMimeType(file.mimetype, file.originalname);
             const uploadedFile = await this.googleDriveService.uploadFile(
-              driveId,
               file.originalname,
+              mimeType,
               file.buffer,
-              file.mimetype,
+              driveId,
             );
 
             await tx.fileMetadata.create({
               data: {
                 submissionId,
-                fieldId: file.fieldname,
+                fieldId: resolvedFieldId,
                 fileName: file.originalname,
                 originalName: file.originalname,
-                mimeType: file.mimetype,
+                mimeType,
                 size: file.size,
                 driveId: uploadedFile.id as string,
                 driveUrl: (uploadedFile.webViewLink ||
@@ -532,6 +578,8 @@ export class FormSubmissionService {
           uploadedAt: file.uploadedAt,
         })),
       };
-    });
+      },
+      { maxWait: 15000, timeout: 60000 },
+    );
   }
 }
