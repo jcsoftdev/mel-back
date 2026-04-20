@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
   Res,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -98,15 +99,51 @@ export class FormsController {
   }
 
   @Get(':id/submissions')
-  @ApiOperation({ summary: 'Get submissions for a form' })
+  @ApiOperation({ summary: 'Get submissions for a form (optional from/to range)' })
   @ApiOkResponse({
     description: 'Form submissions',
     type: FormSubmissionResponseDto,
     isArray: true,
   })
   @ApiNotFoundResponse({ description: 'Form not found' })
-  getSubmissions(@Param('id') id: string) {
-    return this.formsService.getFormSubmissions(id);
+  getSubmissions(
+    @Param('id') id: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.formsService.getFormSubmissions(id, {
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+    });
+  }
+
+  @Get(':id/submissions/xlsx')
+  @ApiOperation({ summary: 'Download form submissions as XLSX with thumbnails' })
+  @ApiOkResponse({ description: 'XLSX file downloaded' })
+  @ApiNotFoundResponse({ description: 'Form not found' })
+  async downloadSubmissionsXlsx(
+    @Param('id') id: string,
+    @Res() res: Response,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const { buffer, filename } = await this.formsService.exportSubmissionsXlsx(
+      id,
+      {
+        from: from ? new Date(from) : undefined,
+        to: to ? new Date(to) : undefined,
+      },
+    );
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`,
+    );
+    res.setHeader('Content-Length', buffer.byteLength.toString());
+    res.send(Buffer.from(buffer));
   }
 
   @Get(':id/submissions/csv')

@@ -39,6 +39,14 @@ export class GoogleDriveService {
     return buffer.toString('base64');
   }
 
+  async getFileAsBuffer(fileId: string): Promise<Buffer> {
+    const response = await this.driveClient.files.get(
+      { fileId, alt: 'media' },
+      { responseType: 'arraybuffer' },
+    );
+    return Buffer.from(response.data as ArrayBuffer);
+  }
+
   async getDirectoryTree(folderId: string) {
     const files = await this.getAllFilesRecursive(folderId);
     const tree = this.buildTree(files, folderId);

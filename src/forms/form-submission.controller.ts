@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseInterceptors,
   UploadedFiles,
   Req,
@@ -98,6 +99,49 @@ export class FormSubmissionController {
     @CurrentUser() user: { id: string },
   ) {
     return this.formSubmissionService.getMySubmission(formId, user.id);
+  }
+
+  @Get('form/:formId/mine')
+  @ApiOperation({
+    summary:
+      "List the authenticated user's submissions for a form (optional ?days=N filter)",
+  })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({
+    status: 200,
+    description: 'User submissions retrieved successfully',
+    type: FormSubmissionResponseDto,
+    isArray: true,
+  })
+  @UseGuards(JwtAuthGuard)
+  getMySubmissions(
+    @Param('formId') formId: string,
+    @CurrentUser() user: { id: string },
+    @Query('days') days?: string,
+  ) {
+    const parsed = days ? Number(days) : undefined;
+    const safeDays = Number.isFinite(parsed) && (parsed as number) > 0
+      ? (parsed as number)
+      : undefined;
+    return this.formSubmissionService.getMySubmissions(
+      formId,
+      user.id,
+      safeDays,
+    );
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a single submission by id (with file base64)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({
+    status: 200,
+    description: 'Submission retrieved',
+    type: FormSubmissionResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Submission not found' })
+  @UseGuards(JwtAuthGuard)
+  getSubmission(@Param('id') id: string) {
+    return this.formSubmissionService.getSubmission(id);
   }
 
   @Get('form/:formId')

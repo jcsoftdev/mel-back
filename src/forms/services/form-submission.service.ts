@@ -225,6 +225,55 @@ export class FormSubmissionService {
     }));
   }
 
+  // List submissions by the authenticated user for a given form, optionally filtered by last N days.
+  // Returns lightweight rows (no base64) for list UI.
+  async getMySubmissions(
+    formId: string,
+    userId: string,
+    days?: number,
+  ): Promise<FormSubmissionResponseDto[]> {
+    const where: Record<string, unknown> = { formId, userId };
+    if (days && days > 0) {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      where.submittedAt = { gte: cutoff };
+    }
+
+    const submissions = await this.prisma.formSubmission.findMany({
+      where,
+      include: {
+        fields: { include: { field: true } },
+        files: true,
+      },
+      orderBy: { submittedAt: 'desc' },
+    });
+
+    return submissions.map((submission) => ({
+      id: submission.id,
+      formId: submission.formId,
+      submittedAt: submission.submittedAt,
+      fields: submission.fields.map((field) => ({
+        id: field.id,
+        fieldId: field.fieldId,
+        value: field.value || undefined,
+        field: {
+          id: field.field.id,
+          label: field.field.label,
+          fieldType: field.field.fieldType.toString(),
+        },
+      })),
+      files: submission.files.map((file) => ({
+        id: file.id,
+        fieldId: file.fieldId,
+        fileName: file.fileName,
+        fileSize: file.size,
+        mimeType: file.mimeType,
+        driveFileId: file.driveId,
+        uploadedAt: file.uploadedAt,
+      })),
+    }));
+  }
+
   // Return the latest submission by the authenticated user for a given form
   async getMySubmission(
     formId: string,
@@ -315,6 +364,34 @@ export class FormSubmissionService {
       throw new NotFoundException('Form submission not found');
     }
 
+    const filesWithBase64 = await Promise.all(
+      submission.files.map(async (file) => {
+        let base64Content: string | undefined;
+        try {
+          if (file.driveId) {
+            base64Content = await this.googleDriveService.getFileAsBase64(
+              file.driveId,
+            );
+          }
+        } catch (error) {
+          console.error(
+            `Failed to get base64 content for file ${file.id}:`,
+            error,
+          );
+        }
+        return {
+          id: file.id,
+          fieldId: file.fieldId,
+          fileName: file.fileName,
+          fileSize: file.size,
+          mimeType: file.mimeType,
+          driveFileId: file.driveId,
+          uploadedAt: file.uploadedAt,
+          base64Content,
+        };
+      }),
+    );
+
     return {
       id: submission.id,
       formId: submission.formId,
@@ -329,15 +406,7 @@ export class FormSubmissionService {
           fieldType: field.field.fieldType.toString(),
         },
       })),
-      files: submission.files.map((file) => ({
-        id: file.id,
-        fieldId: file.fieldId,
-        fileName: file.fileName,
-        fileSize: file.size,
-        mimeType: file.mimeType,
-        driveFileId: file.driveId,
-        uploadedAt: file.uploadedAt,
-      })),
+      files: filesWithBase64,
     };
   }
 
